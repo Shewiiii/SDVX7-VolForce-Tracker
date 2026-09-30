@@ -1,0 +1,4 @@
+py-cord
+python-dotenv
+pillow
+aiohttp

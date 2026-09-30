@@ -1,0 +1,4 @@
+.env
+sdvx_rpc.py
+cache/
+__pycache__/
