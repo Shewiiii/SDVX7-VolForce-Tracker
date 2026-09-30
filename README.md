@@ -29,5 +29,14 @@ pip install -r requirements.txt
 - Run the bot (create a .bat for easy access)
 
 ```bash
-.venv/Scripts/python.exe bot.py
+python bot.py
 ```
+
+## Credits
+
+- A part of the code is from Ryu's [SDVX-Discord-Rich-Presence](https://github.com/Ryu7w7/SDVX-Discord-Rich-Presence/blob/main/main.cpp), in particular the stdout parsing.
+
+- `sdvx_rpc.py` file in JoFoxTheCat's [SDVX ∇ Launcher](https://github.com/JofoxTheCat/SDVX7-Launcher) has been used to find memory address of current song's difficulty.
+
+## Limitation
+I have not been able to find memory address of the clear type yet, so every clear type is listed, except Crash, and PUC when it's not the case.
