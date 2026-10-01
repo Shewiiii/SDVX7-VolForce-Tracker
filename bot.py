@@ -52,9 +52,7 @@ DIFF_SLOT_TAGS = {
 }
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # COLOR EXTRACTION & IMGUR UPLOAD
-# ─────────────────────────────────────────────────────────────────────────────
 
 
 def get_accent_color(image_bytes: bytes, threshold: int = 50) -> tuple[int, int, int]:
@@ -192,9 +190,7 @@ async def upload_cover(cover_bytes: bytes) -> dict:
     return result
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # DATABASE & VOLFORCE
-# ─────────────────────────────────────────────────────────────────────────────
 
 
 def get_grade_coeff(score: int) -> tuple[float, str]:
@@ -294,9 +290,32 @@ def compute_vf(level: float, score: int, clear_coeff: float) -> float:
     return math.floor(raw) * 0.001
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # BOT LIFECYCLE & DISPATCH
-# ─────────────────────────────────────────────────────────────────────────────
+
+
+def format_score_breakdown(data: dict) -> str:
+    """Display only transmitted counters; missing counts are not zero."""
+    counts = data.get("score_breakdown") or {}
+
+    def count(key: str) -> str:
+        value = counts.get(key)
+        if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
+            return f"{value:,}"
+        return "—"
+
+    if not counts:
+        return "Judgment counts were not provided in this result."
+    lines = [
+        f"- {label}: {count(key)}"
+        for label, key in (
+            ("S-CRITICAL", "s_critical"),
+            ("CRITICAL", "critical"),
+            ("NEAR", "near"),
+            ("ERROR", "error"),
+        )
+    ]
+    return "\n".join(lines)
+
 
 intents = discord.Intents.default()
 bot = discord.Bot(intents=intents)
@@ -318,6 +337,11 @@ async def on_ready():
     logger.info("Bot connected as %s (ID: %s)", bot.user, bot.user.id)
     logger.info(
         "Watching for NEW scores from position %d in %s", last_read_pos, log_path
+    )
+
+    await bot.change_presence(
+        status=discord.Status.online,
+        activity=discord.Game(name="SOUND VOLTEX ∇"),
     )
 
     if not watch_score_log.is_running():
@@ -355,9 +379,15 @@ async def watch_score_log():
             continue
         try:
             data = json.loads(line)
+            # Only proxy records with authoritative server-side VolForce count.
+            if "volforce" not in data:
+                logger.info("Ignoring score without server VolForce: %s", data)
+                continue
             mid = int(data["music_id"])
             diff_idx = int(data["diff_idx"])
             score = int(data["score"])
+            volforce = int(data["volforce"])
+            clear_type = int(data.get("clear_type", 0))
 
             song_title = title_db.get(mid, f"Music #{mid}")
             diff_name = DIFF_NAMES.get(diff_idx, "UNK")
@@ -376,11 +406,22 @@ async def watch_score_log():
                 if dominant_rgb and len(dominant_rgb) == 3:
                     embed_color = discord.Color.from_rgb(*dominant_rgb)
 
+            clear_names = {
+                1: "Crash",
+                2: "Effective Clear",
+                3: "Excessive Clear",
+                4: "UC",
+                5: "PUC",
+                6: "Maxxive Clear",
+            }
+
             embed = discord.Embed(
                 title=f"{song_title}",
                 description=(
                     f"**Difficulty:** {diff_name} ({level:.1f})\n"
-                    f"**Score:** {score:,} ({grade_name})"
+                    f"**Score:** {score:,} ({grade_name})\n"
+                    f"**Clear:** {clear_names.get(clear_type, 'Unknown')}\n"
+                    f"**VolForce:** `{volforce / 1000:.3f}`"
                 ),
                 color=embed_color,
             )
@@ -388,28 +429,11 @@ async def watch_score_log():
             if cover_url:
                 embed.set_thumbnail(url=cover_url)
 
-            if score == 10000000:
-                puc_vf = compute_vf(level, score, 1.10)
-                embed.add_field(
-                    name="PUC (1.10)", value=f"`{puc_vf:.3f}`", inline=False
-                )
-            else:
-                eff_vf = compute_vf(level, score, 1.00)
-                exc_vf = compute_vf(level, score, 1.02)
-                max_vf = compute_vf(level, score, 1.04)
-                uc_vf = compute_vf(level, score, 1.06)
-
-                embed.add_field(
-                    name="Effective (1.00)", value=f"`{eff_vf:.3f}`", inline=True
-                )
-                embed.add_field(
-                    name="Excessive (1.02)", value=f"`{exc_vf:.3f}`", inline=True
-                )
-                embed.add_field(
-                    name="Maxxive (1.04)", value=f"`{max_vf:.3f}`", inline=True
-                )
-                embed.add_field(name="UC (1.06)", value=f"`{uc_vf:.3f}`", inline=False)
-
+            embed.add_field(
+                name="Score breakdown",
+                value=format_score_breakdown(data),
+                inline=False,
+            )
             embed.set_footer(text="SDVX ∇ VolForce Tracker")
             await user.send(embed=embed)
             logger.info("Sent VolForce DM for mid=%d (%s) to %s", mid, song_title, user)

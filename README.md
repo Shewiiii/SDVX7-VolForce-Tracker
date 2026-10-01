@@ -1,42 +1,59 @@
 # SDVX ∇ VolForce Tracker
 
-Very random script to send results after a play in DMs for SOUND VOLTEX ∇, version `KFC-2026082500` only.
+Very random script to send results after a play in DMs for SOUND VOLTEX ∇, running on the RyuNET private network.
 
 The main point of it is to be able to fast check VF after each play.
 
-The script reads data directly from the memory allocated in the heap by the game for the score, thus `SCORE_WRITE_OFFSET` and `DIFF_INDEX_OFFSET` has to be changed after each update. See `score_hook.cpp` for more details.
+The script observes the game's e-amusement result requests through a local proxy and forwards them unchanged to Ryu's server. This provides the score, difficulty, clear type, and server-calculated per-chart VolForce without game-memory offsets like previously.
 
-![Rasist sending play results](img/rasist.jpg)
+![Rasis sending play results](img/rasis.jpg)
 
 ## Setup
 
 - Clone the repo and move it to sdvx' root folder
-- Compile the C++ code
+- Install Node.js.
+- Download [RyuNET-core](https://github.com/Ryu7w7/RyuNET-core), then move `RyuNET-core-master` next to `ea_proxy.ts`. Your game's folder should look like this:
 
-```cpp
-g++ -O2 -shared -o score_hook.dll score_hook.cpp -static
+```text
+SOUND VOLTEX NABLA/
+...
+|-- SDVX7-VolForce-Tracker-main/
+	|-- bot.py
+	|-- ea_proxy.ts
+	|-- run_tracker.bat
+	|-- RyuNET-core-master/
+		...
 ```
 
-- Move the DLL to the game's root folder, and add it to the Inject DLL Hooks list from `spicecfg.exe`
+- Install the RyuNET-core Node.js dependencies once, so the local proxy can reuse its protocol decoders:
+
+```powershell
+cd C:\Path\To\RyuNET-core-master
+npm install
+```
+
+- Set Spice2x's EA Service URL to `http://127.0.0.1:8080/service`.
 - Create a Discord app
-- Create a .env file based on the template and fill the needed fields (Imgur is optional)
 - Install the needed Python requirements, use a venv as needed:
 
 ```bash
 pip install -r requirements.txt
 ```
+- Create and fill a .env fill from the template (Imgur is optional)
+-  
+- Run `run_tracker.bat`, it will run the game as well. Create a shortcut of it for easy access !
 
-- Run the bot (create a .bat for easy access)
+> [!NOTE]  
+> If you use a virtual environment, replace the Python launcher line. Replace `venv` with whatever the name of your venv is.
+> ```bat
+> start "SDVX Discord Bot" /D "%REPO_ROOT%" "%ComSpec%" /k "%REPO_ROOT%venv\Scripts\python.exe" "%REPO_ROOT%bot.py"
+> ```
 
-```bash
-python bot.py
-```
+## Limitations
+
+- You cannot run the game without the proxy, as long as EA Service URL is set to localhost.
+- Due to API limitations, the message is sent only after quitting the result page.
 
 ## Credits
 
-- A part of the code is from Ryu's [SDVX-Discord-Rich-Presence](https://github.com/Ryu7w7/SDVX-Discord-Rich-Presence/blob/main/main.cpp), in particular the stdout parsing.
-
-- `sdvx_rpc.py` file in JoFoxTheCat's [SDVX ∇ Launcher](https://github.com/JofoxTheCat/SDVX7-Launcher) has been used to find memory address of current song's difficulty.
-
-## Limitation
-I have not been able to find memory address of the clear type yet, so every clear type is listed, except Crash, and PUC when it's not the case.
+- The local proxy reuses the e-amusement decoding utilities from [RyuNET-core](https://github.com/Ryu7w7/RyuNET-core).

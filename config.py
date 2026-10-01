@@ -1,9 +1,13 @@
 import logging
 import sys
+from pathlib import Path
 
-SCORE_LOG_PATH = "C:/Games/SOUND VOLTEX NABLA/score_log.txt"
+REPO_ROOT = Path(__file__).resolve().parent
+GAME_ROOT = REPO_ROOT.parent
+
+SCORE_LOG_PATH = str(REPO_ROOT / "score_log.txt")
+MUSIC_DB_PATH = str(GAME_ROOT / "data" / "others" / "music_db.xml")
 PULLING_RATE = 1
-MUSIC_DB_PATH = "C:/Games/SOUND VOLTEX NABLA/data/others/music_db.xml"
 
 logging.basicConfig(
     level=logging.INFO,

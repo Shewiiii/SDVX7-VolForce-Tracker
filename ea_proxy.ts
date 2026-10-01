@@ -1,0 +1,414 @@
+// @ts-nocheck
+
+const http = require("http");
+const https = require("https");
+const path = require("path");
+const querystring = require("querystring");
+const fs = require("fs");
+
+const listenPort = Number(process.env.TRACKER_PROXY_PORT || 8080);
+const upstreamUrl = new URL(
+    process.env.TRACKER_UPSTREAM || "http://ea.ryu7w7.xyz",
+);
+const scoreLogPath = path.join(__dirname, "score_log.txt");
+const ryuRoot = process.env.RYUNET_ROOT;
+
+if (!ryuRoot) {
+    throw new Error("RYUNET_ROOT must point to the RyuNET-core-master folder.");
+}
+
+const { KonmaiEncrypt } = require(
+    path.join(ryuRoot, "src/utils/KonmaiEncrypt"),
+);
+const LzKN = require(path.join(ryuRoot, "src/utils/LzKN")).default;
+const KBin = require(path.join(ryuRoot, "src/utils/KBinJSON"));
+
+function first(value) {
+    if (Array.isArray(value)) return value.length ? first(value[0]) : undefined;
+    if (value && typeof value === "object" && "@content" in value) {
+        return first(value["@content"]);
+    }
+    return value;
+}
+
+function number(value) {
+    const result = Number(first(value));
+    return Number.isFinite(result) ? result : undefined;
+}
+
+function field(node, name) {
+    if (!node || typeof node !== "object") return undefined;
+    if (name in node) return first(node[name]);
+    if (node["@attr"] && name in node["@attr"])
+        return first(node["@attr"][name]);
+    return undefined;
+}
+
+function findTracks(value, result = []) {
+    if (!value || typeof value !== "object") return result;
+    if (Array.isArray(value)) {
+        for (const item of value) findTracks(item, result);
+        return result;
+    }
+    for (const [key, child] of Object.entries(value)) {
+        if (key === "track") {
+            for (const item of Array.isArray(child) ? child : [child]) {
+                if (item && typeof item === "object") result.push(item);
+            }
+        } else if (key !== "@attr" && key !== "@content") {
+            findTracks(child, result);
+        }
+    }
+    return result;
+}
+
+function decodeRequest(req, raw) {
+    let body = raw;
+    let compressed = String(req.headers["x-compress"] || "none");
+    const contentType = String(req.headers["content-type"] || "");
+
+    if (contentType.includes("application/x-www-form-urlencoded")) {
+        const form = querystring.parse(raw.toString("utf8"));
+        if (form.request && form.protocol_version) {
+            throw new Error(
+                "EaCloud form payloads are not supported by this sidecar yet.",
+            );
+        }
+    } else if (req.headers["x-eamuse-info"]) {
+        body = new KonmaiEncrypt(String(req.headers["x-eamuse-info"])).encrypt(
+            body,
+        );
+    }
+
+    if (compressed === "lz77") body = LzKN.inflate(body);
+
+    let data;
+    let encoding = "utf8";
+    if (KBin.isKBin(body)) {
+        encoding = KBin.kgetEncoding(body);
+        data = KBin.kdecode(body);
+    } else {
+        encoding = KBin.detectXMLEncoding(body);
+        data = KBin.xmlToData(body, encoding);
+    }
+
+    const call = data.call || {};
+    const moduleName = call["@attr"]
+        ? Object.keys(call).find((key) => key !== "@attr")
+        : undefined;
+    const moduleData = moduleName ? call[moduleName] : undefined;
+    const methods = Array.isArray(moduleData) ? moduleData : [moduleData];
+    const method = methods
+        .map((item) => item && item["@attr"] && item["@attr"].method)
+        .filter(Boolean)
+        .join(".");
+
+    return { data: moduleData, route: `${moduleName}.${method}`, encoding };
+}
+
+function captureJudgments(track) {
+    const counts = {};
+    const raw = {};
+    const visit = (node, parts = []) => {
+        if (!node || typeof node !== "object" || Buffer.isBuffer(node)) return;
+        for (const [name, child] of Object.entries(node)) {
+            if (name === "@content") continue;
+            if (name === "@attr") {
+                visit(child, parts);
+                continue;
+            }
+            const pathParts = [...parts, name];
+            if (/critical|\bjust\b|near|error|early|late|judg/i.test(name)) {
+                let value = child;
+                if (value && typeof value === "object" && "@content" in value)
+                    value = value["@content"];
+                if (Array.isArray(value) && value.length === 1)
+                    value = value[0];
+                if (
+                    typeof value === "number" ||
+                    typeof value === "string" ||
+                    Array.isArray(value)
+                )
+                    raw[pathParts.join(".")] = value;
+            }
+            const normalized = pathParts
+                .join("_")
+                .toLowerCase()
+                .replace(/[^a-z0-9]/g, "");
+            const aliases = {
+                scritical: "s_critical",
+                just: "s_critical",
+                critical: "critical",
+                near: "near",
+                error: "error",
+                early: "early",
+                late: "late",
+                earlycritical: "early_critical",
+                criticalearly: "early_critical",
+                earlynear: "early_near",
+                nearearly: "early_near",
+                earlyerror: "early_error",
+                errorearly: "early_error",
+                latecritical: "late_critical",
+                criticallate: "late_critical",
+                latenear: "late_near",
+                nearlate: "late_near",
+                lateerror: "late_error",
+                errorlate: "late_error",
+            };
+            const key = aliases[normalized];
+            let value = child;
+            if (value && typeof value === "object" && "@content" in value)
+                value = value["@content"];
+            if (Array.isArray(value) && value.length === 1) value = value[0];
+            if (
+                key &&
+                (typeof value === "number" ||
+                    (typeof value === "string" && /^\d+$/.test(value)))
+            ) {
+                const count = Number(value);
+                if (
+                    Number.isSafeInteger(count) &&
+                    count >= 0 &&
+                    !(key in counts)
+                )
+                    counts[key] = count;
+            }
+            if (child && typeof child === "object" && !("@content" in child))
+                visit(child, pathParts);
+        }
+    };
+    visit(track);
+    return { counts, raw };
+}
+
+function writeResults(decoded) {
+    if (!decoded.route || !decoded.route.endsWith("_save_m")) return;
+
+    for (const track of findTracks(decoded.data)) {
+        const musicId = number(field(track, "music_id"));
+        const diffIdx = number(field(track, "music_type"));
+        const score = number(field(track, "score"));
+        const volforce = number(field(track, "volforce"));
+        if (
+            musicId === undefined ||
+            diffIdx === undefined ||
+            score === undefined
+        )
+            continue;
+        if (volforce === undefined || volforce <= 0) {
+            console.warn("Ignoring save_m without server VolForce", {
+                musicId,
+                diffIdx,
+            });
+            continue;
+        }
+
+        const judgments = captureJudgments(track);
+        if (!Object.keys(judgments.counts).length) {
+            console.warn(
+                "No recognized judgment counters; judgment field names:",
+                Object.keys(judgments.raw),
+            );
+        }
+        const record = {
+            music_id: musicId,
+            diff_idx: diffIdx,
+            score,
+            clear_type: number(field(track, "clear_type")) || 0,
+            score_grade: number(field(track, "score_grade")) || 0,
+            exscore: number(field(track, "exscore")) || 0,
+            volforce,
+            score_breakdown: judgments.counts,
+            judgment_fields: judgments.raw,
+            received_at: new Date().toISOString(),
+        };
+        fs.appendFileSync(scoreLogPath, JSON.stringify(record) + "\n", "utf8");
+        console.log("Captured exact VolForce", record);
+    }
+}
+
+const serviceTargets = new Map();
+const servicePrefix = "/__tracker/service/";
+
+function rewriteServicesResponse(requestUrl, body, headers) {
+    if (
+        new URL(requestUrl, upstreamUrl).searchParams.get("f") !==
+        "services.get"
+    )
+        return body;
+
+    try {
+        let plain = body;
+        const key = headers["x-eamuse-info"]
+            ? new KonmaiEncrypt(String(headers["x-eamuse-info"]))
+            : undefined;
+        if (key) plain = key.encrypt(plain);
+        const compression = String(headers["x-compress"] || "none");
+        if (compression === "lz77") plain = LzKN.inflate(plain);
+        else if (compression !== "none")
+            throw new Error(`Unsupported X-Compress: ${compression}`);
+        if (
+            headers["content-encoding"] &&
+            headers["content-encoding"] !== "identity"
+        )
+            throw new Error("Unsupported HTTP Content-Encoding");
+
+        const binary = KBin.isKBin(plain);
+        const encoding = binary
+            ? KBin.kgetEncoding(plain)
+            : KBin.detectXMLEncoding(plain);
+        const decoded = binary
+            ? KBin.kdecode(plain)
+            : KBin.xmlToData(plain, encoding);
+        const items = decoded?.response?.services?.item;
+        if (!items) throw new Error("Missing response.services.item");
+        const targets = new Map();
+        for (const item of Array.isArray(items) ? items : [items]) {
+            const attrs = item["@attr"];
+            if (
+                !attrs?.url ||
+                !attrs.name ||
+                ["ntp", "keepalive"].includes(attrs.name)
+            )
+                continue;
+            const target = new URL(attrs.url);
+            if (!["http:", "https:"].includes(target.protocol)) continue;
+            const name = encodeURIComponent(attrs.name);
+            targets.set(name, target);
+            attrs.url = `http://127.0.0.1:${listenPort}${servicePrefix}${name}${target.pathname}${target.search}`;
+        }
+        if (!targets.size) throw new Error("No HTTP service endpoints found");
+        let response = binary
+            ? KBin.kencode(decoded, encoding, plain[1] === 0x42)
+            : KBin.dataToXMLBuffer(decoded, { encoding });
+        if (compression === "lz77") response = LzKN.deflate(response);
+        if (key) response = key.encrypt(response);
+        for (const [name, target] of targets) serviceTargets.set(name, target);
+        console.log(
+            `Rewrote ${targets.size} service endpoints (format=${binary ? "KBin" : "XML"}, x-compress=${compression}, encrypted=${Boolean(key)})`,
+        );
+        return response;
+    } catch (error) {
+        console.error(
+            "services.get rewrite failed; forwarding original response:",
+            error.message,
+        );
+        return body;
+    }
+}
+
+function forwardingTarget(requestUrl) {
+    const incoming = new URL(requestUrl, upstreamUrl);
+    if (incoming.pathname.startsWith(servicePrefix)) {
+        const rest = incoming.pathname.slice(servicePrefix.length);
+        const slash = rest.indexOf("/");
+        const name = slash < 0 ? rest : rest.slice(0, slash);
+        const target = serviceTargets.get(name);
+        if (!target)
+            throw new Error(
+                "Unknown service endpoint; restart the game to refresh discovery",
+            );
+        return new URL(
+            `${slash < 0 ? "/" : rest.slice(slash)}${incoming.search}`,
+            target.origin,
+        );
+    }
+    return new URL(
+        `${upstreamUrl.pathname.replace(/\/$/, "")}${incoming.pathname}${incoming.search}`,
+        upstreamUrl.origin,
+    );
+}
+
+const server = http.createServer((req, res) => {
+    console.log(`Incoming ${req.method} ${req.url}`);
+    const chunks = [];
+    req.on("data", (chunk) => chunks.push(chunk));
+    req.on("end", () => {
+        const body = Buffer.concat(chunks);
+        let target;
+        try {
+            target = forwardingTarget(req.url || "/");
+        } catch (error) {
+            console.error("Cannot forward request:", error.message);
+            res.writeHead(502);
+            res.end("Bad gateway");
+            return;
+        }
+        const headers = { ...req.headers, host: target.host };
+        delete headers["content-length"];
+        delete headers["transfer-encoding"];
+        headers["content-length"] = body.length;
+
+        const client = target.protocol === "https:" ? https : http;
+        const upstream = client.request(
+            {
+                hostname: target.hostname,
+                port: target.port || (target.protocol === "https:" ? 443 : 80),
+                method: req.method,
+                path: `${target.pathname}${target.search}`,
+                headers,
+            },
+            (upstreamResponse) => {
+                const responseChunks = [];
+                upstreamResponse.on("data", (chunk) =>
+                    responseChunks.push(chunk),
+                );
+                upstreamResponse.on("end", () => {
+                    const upstreamBody = Buffer.concat(responseChunks);
+                    const responseBody =
+                        upstreamResponse.statusCode === 200
+                            ? rewriteServicesResponse(
+                                  req.url || "",
+                                  upstreamBody,
+                                  upstreamResponse.headers,
+                              )
+                            : upstreamBody;
+                    if ((req.url || "").includes("f=services.get")) {
+                        console.log(
+                            `services.get response ${upstreamResponse.statusCode || 502}; ` +
+                                `type=${upstreamResponse.headers["content-type"] || "unknown"}; ` +
+                                `encoding=${upstreamResponse.headers["content-encoding"] || "identity"}; ` +
+                                `bytes=${upstreamBody.length}->${responseBody.length}`,
+                        );
+                    }
+                    const responseHeaders = { ...upstreamResponse.headers };
+                    if (responseBody !== upstreamBody) {
+                        delete responseHeaders.etag;
+                        delete responseHeaders["content-md5"];
+                    }
+                    delete responseHeaders["content-length"];
+                    delete responseHeaders["transfer-encoding"];
+                    responseHeaders["content-length"] = responseBody.length;
+                    res.writeHead(
+                        upstreamResponse.statusCode || 502,
+                        responseHeaders,
+                    );
+                    res.end(responseBody);
+                });
+            },
+        );
+
+        upstream.on("error", (error) => {
+            console.error("Upstream request failed:", error.message);
+            if (!res.headersSent) res.writeHead(502);
+            res.end("Bad gateway");
+        });
+        upstream.write(body);
+        upstream.end();
+
+        try {
+            if (req.method === "POST") writeResults(decodeRequest(req, body));
+        } catch (error) {
+            console.error("Could not decode request:", error.message);
+        }
+    });
+});
+
+server.listen(listenPort, "127.0.0.1", () => {
+    console.log(
+        `SDVX ∇ VolForce Tracker listening on http://127.0.0.1:${listenPort}`,
+    );
+    console.log(`Forwarding to ${upstreamUrl.origin}`);
+    console.log(`Writing results to ${scoreLogPath}`);
+});
