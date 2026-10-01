@@ -4,7 +4,7 @@ Very random script to send results after a play in DMs for SOUND VOLTEX ∇, run
 
 The main point of it is to be able to fast check VF after each play.
 
-The script observes the game's e-amusement result requests through a local proxy and forwards them unchanged to Ryu's server. This provides the score, difficulty, clear type, and server-calculated per-chart VolForce without game-memory offsets like previously.
+The script observes the game's e-amusement result requests through a local proxy and forwards them unchanged to Ryu's server.
 
 ![Rasis sending play results](img/rasis.jpg)
 
