@@ -1,3 +1,4 @@
+import asyncio
 import hashlib
 import json
 import logging
@@ -17,6 +18,7 @@ from dotenv import load_dotenv
 from PIL import Image
 
 from config import MUSIC_DB_PATH, PULLING_RATE, SCORE_LOG_PATH
+from performance import load_performance_history, render_performance_graph
 
 logger = logging.getLogger("sdvx_bot")
 
@@ -318,6 +320,7 @@ def format_score_breakdown(data: dict) -> str:
 
 
 intents = discord.Intents.default()
+intents.message_content = True
 bot = discord.Bot(intents=intents)
 
 last_read_pos = 0
@@ -379,9 +382,9 @@ async def watch_score_log():
             continue
         try:
             data = json.loads(line)
-            # Only proxy records with authoritative server-side VolForce count.
+            # New proxy records contain VF calculated for this specific play.
             if "volforce" not in data:
-                logger.info("Ignoring score without server VolForce: %s", data)
+                logger.info("Ignoring score without calculated VolForce: %s", data)
                 continue
             mid = int(data["music_id"])
             diff_idx = int(data["diff_idx"])
@@ -455,6 +458,42 @@ async def watch_score_log():
 @watch_score_log.error
 async def watch_score_log_error(error):
     logger.error("watch_score_log task encountered an error: %s", error)
+
+
+# MISC COMMANDS
+@bot.slash_command(
+    name="performance",
+    description="Graph bot owner's tracked current-play VolForce over time.",
+    integration_types={
+        discord.IntegrationType.guild_install,
+        discord.IntegrationType.user_install,
+    },
+)
+async def performance(
+    ctx: discord.ApplicationContext,
+    period: discord.Option(
+        str, choices=["day", "week", "month", "3 months", "all time"]
+    ) = "all time",  # type: ignore
+) -> None:
+    await ctx.defer()
+    days = {"day": 1, "week": 7, "month": 30, "3 months": 90, "all time": 0}[period]
+    try:
+        plays = await asyncio.to_thread(
+            load_performance_history, SCORE_LOG_PATH, USER_ID, USER_ID, level_db, days
+        )
+        if not plays:
+            await ctx.respond(
+                "No non-Crash plays recorded for the bot owner in that period.",
+            )
+            return
+        image = await asyncio.to_thread(
+            render_performance_graph, plays, f"VolForce History, {period}",
+            show_hours=period == "day",
+        )
+        await ctx.respond(file=discord.File(image, filename="performance.png"))
+    except (OSError, ValueError) as error:
+        logger.error("Performance graph failed: %s", error)
+        await ctx.respond("Could not read or render performance history.")
 
 
 if __name__ == "__main__":

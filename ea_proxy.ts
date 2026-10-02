@@ -23,6 +23,91 @@ const { KonmaiEncrypt } = require(
 const LzKN = require(path.join(ryuRoot, "src/utils/LzKN")).default;
 const KBin = require(path.join(ryuRoot, "src/utils/KBinJSON"));
 
+const musicDbPath = path.join(
+    __dirname,
+    "..",
+    "data",
+    "others",
+    "music_db.xml",
+);
+const difficultyTags = [
+    ["novice"],
+    ["advanced"],
+    ["exhaust"],
+    ["infinite", "gravity", "heaven", "vivid", "exceed", "nabla"],
+    ["maximum"],
+    ["ultimate"],
+];
+
+function loadChartLevels() {
+    const levels = new Map();
+    try {
+        const raw = fs.readFileSync(musicDbPath);
+        const db = KBin.xmlToData(raw, KBin.detectXMLEncoding(raw));
+        const entries = db.mdb?.music || [];
+        for (const music of Array.isArray(entries) ? entries : [entries]) {
+            const id = number(field(music, "id"));
+            if (id === undefined) continue;
+            difficultyTags.forEach((tags, index) => {
+                const chart = tags
+                    .map((tag) => music.difficulty?.[tag])
+                    .find(Boolean);
+                const rawLevel = number(field(chart, "difnum"));
+                if (rawLevel === undefined || rawLevel <= 0) return;
+                levels.set(
+                    `${id}:${index}`,
+                    rawLevel > 20 ? rawLevel / 10 : rawLevel,
+                );
+            });
+        }
+        console.log(
+            `Loaded ${levels.size} chart levels for current-play VolForce`,
+        );
+    } catch (error) {
+        console.error(
+            `Cannot load chart levels from ${musicDbPath}:`,
+            error.message,
+        );
+    }
+    return levels;
+}
+
+const chartLevels = loadChartLevels();
+
+function calculatePlayVolforce(level, score, clearType) {
+    const grades = [
+        [9900000, 105],
+        [9800000, 102],
+        [9700000, 100],
+        [9500000, 97],
+        [9300000, 94],
+        [9000000, 91],
+        [8700000, 88],
+        [7500000, 85],
+        [6500000, 82],
+        [0, 80],
+    ];
+    const clears = { 1: 50, 2: 100, 3: 102, 4: 106, 5: 110, 6: 104 };
+    if (
+        !Number.isFinite(level) ||
+        level <= 0 ||
+        !Number.isSafeInteger(score) ||
+        score < 0 ||
+        score > 10000000 ||
+        !(clearType in clears)
+    )
+        return undefined;
+    const grade = grades.find(([threshold]) => score >= threshold)[1];
+    // Integer arithmetic avoids floating-point errors at truncation boundaries.
+    const numerator =
+        BigInt(Math.round(level * 10)) *
+        BigInt(score) *
+        BigInt(grade) *
+        BigInt(clears[clearType]) *
+        20n;
+    return Number(numerator / 1000000000000n);
+}
+
 function first(value) {
     if (Array.isArray(value)) return value.length ? first(value[0]) : undefined;
     if (value && typeof value === "object" && "@content" in value) {
@@ -189,18 +274,25 @@ function writeResults(decoded) {
         const musicId = number(field(track, "music_id"));
         const diffIdx = number(field(track, "music_type"));
         const score = number(field(track, "score"));
-        const volforce = number(field(track, "volforce"));
+        const clearType = number(field(track, "clear_type"));
         if (
             musicId === undefined ||
             diffIdx === undefined ||
             score === undefined
         )
             continue;
-        if (volforce === undefined || volforce <= 0) {
-            console.warn("Ignoring save_m without server VolForce", {
-                musicId,
-                diffIdx,
-            });
+        const level = chartLevels.get(`${musicId}:${diffIdx}`);
+        const volforce = calculatePlayVolforce(level, score, clearType);
+        if (volforce === undefined) {
+            console.warn(
+                "Cannot calculate current-play VolForce: missing level or invalid score/clear type",
+                {
+                    musicId,
+                    diffIdx,
+                    level,
+                    clearType,
+                },
+            );
             continue;
         }
 
@@ -215,16 +307,18 @@ function writeResults(decoded) {
             music_id: musicId,
             diff_idx: diffIdx,
             score,
-            clear_type: number(field(track, "clear_type")) || 0,
+            clear_type: clearType,
             score_grade: number(field(track, "score_grade")) || 0,
             exscore: number(field(track, "exscore")) || 0,
             volforce,
+            volforce_source: "current_play_formula",
+            level,
             score_breakdown: judgments.counts,
             judgment_fields: judgments.raw,
             received_at: new Date().toISOString(),
         };
         fs.appendFileSync(scoreLogPath, JSON.stringify(record) + "\n", "utf8");
-        console.log("Captured exact VolForce", record);
+        console.log("Captured VolForce", record);
     }
 }
 
