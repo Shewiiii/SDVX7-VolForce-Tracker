@@ -413,9 +413,9 @@ async def watch_score_log():
                 1: "Crash",
                 2: "Effective Clear",
                 3: "Excessive Clear",
-                4: "UC",
-                5: "PUC",
-                6: "Maxxive Clear",
+                4: "Maxxive Clear",
+                5: "UC",
+                6: "PUC",
             }
 
             embed = discord.Embed(
