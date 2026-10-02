@@ -1,8 +1,7 @@
 # SDVX ∇ VolForce Tracker
 
-Very random script to send results after a play in Discord DMs for SOUND VOLTEX ∇, running on the RyuNET private network.
-
-The main point of it is to be able to fast check VF after each play.
+Very random script to track, send, and generate stats of plays in real time, for SOUND VOLTEX ∇, running on the RyuNET private network.  
+They are sent in Discord DMs via a local bot.
 
 The script observes the game's e-amusement result requests through a local proxy and forwards them unchanged to Ryu's server.
 
@@ -16,12 +15,11 @@ The script observes the game's e-amusement result requests through a local proxy
 	<img src="img/performance.jpg" alt="VolForce Performance History embed" width="700">
 </p>
 
-
 ## Setup
 
 - Clone the repo and move it to sdvx' root folder
 - Install Node.js.
-- Download [RyuNET-core](https://github.com/Ryu7w7/RyuNET-core), then move `RyuNET-core-master` next to `ea_proxy.ts`. Your game's folder should look like this:
+- Clone Ryu's [RyuNET-core](https://github.com/Ryu7w7/RyuNET-core) repo, then move `RyuNET-core-master` next to `ea_proxy.ts`. Your game's folder should look like this:
 
 ```text
 SOUND VOLTEX NABLA/
