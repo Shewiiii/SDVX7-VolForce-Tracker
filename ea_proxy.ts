@@ -87,7 +87,7 @@ function calculatePlayVolforce(level, score, clearType) {
         [6500000, 82],
         [0, 80],
     ];
-    const clears = { 1: 50, 2: 100, 3: 102, 4: 106, 5: 110, 6: 104 };
+    const clears = { 1: 50, 2: 100, 3: 102, 4: 104, 5: 106, 6: 110 };
     if (
         !Number.isFinite(level) ||
         level <= 0 ||
