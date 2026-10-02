@@ -1,12 +1,21 @@
 # SDVX ∇ VolForce Tracker
 
-Very random script to send results after a play in DMs for SOUND VOLTEX ∇, running on the RyuNET private network.
+Very random script to send results after a play in Discord DMs for SOUND VOLTEX ∇, running on the RyuNET private network.
 
 The main point of it is to be able to fast check VF after each play.
 
 The script observes the game's e-amusement result requests through a local proxy and forwards them unchanged to Ryu's server.
 
-![Rasis sending play results](img/rasis.jpg)
+<p>
+	<img src="img/rasis.jpg" alt="Rasis sending play results" width="400">
+</p>
+<p>
+	<img src="img/top-plays.jpg" alt="Top Plays embed" width="700">
+</p>
+<p>
+	<img src="img/performance.jpg" alt="VolForce Performance History embed" width="700">
+</p>
+
 
 ## Setup
 
@@ -39,11 +48,13 @@ npm install
 ```bash
 pip install -r requirements.txt
 ```
+
 - Create and fill a .env from the template (Imgur is optional)
-- Run `run_tracker.bat`, *then* start the game. Create a shortcut of it for easy access !
+- Run `run_tracker.bat`, _then_ start the game. Create a shortcut of it for easy access !
 
 > [!NOTE]  
 > If you use a virtual environment, replace the Python launcher line. Replace `venv` with whatever the name of your venv is.
+>
 > ```bat
 > start "SDVX Discord Bot" /D "%REPO_ROOT%" "%ComSpec%" /k "%REPO_ROOT%venv\Scripts\python.exe" "%REPO_ROOT%bot.py"
 > ```

@@ -14,11 +14,15 @@ from pathlib import Path
 import aiohttp
 import discord
 from discord.ext import tasks
-from dotenv import load_dotenv
+from dotenv import dotenv_values, load_dotenv
 from PIL import Image
 
 from config import MUSIC_DB_PATH, PULLING_RATE, SCORE_LOG_PATH
-from performance import load_performance_history, render_performance_graph
+from performance import (
+    load_performance_history,
+    load_play_history,
+    render_performance_graph,
+)
 
 logger = logging.getLogger("sdvx_bot")
 
@@ -31,6 +35,10 @@ if not BOT_TOKEN or not USER_ID_RAW:
     raise ValueError("Missing BOT_TOKEN or USER_ID in .env file")
 
 USER_ID = int(USER_ID_RAW)
+USERNAME = (
+    dotenv_values(Path(__file__).resolve().parent / ".env").get("USERNAME")
+    or "the player"
+).strip() or "the player"
 
 CACHE_DIR = Path("cache")
 CACHE_DIR.mkdir(parents=True, exist_ok=True)
@@ -52,6 +60,8 @@ DIFF_SLOT_TAGS = {
     4: ("maximum",),
     5: ("ultimate",),
 }
+
+artist_db = {}
 
 
 # COLOR EXTRACTION & IMGUR UPLOAD
@@ -138,7 +148,7 @@ def find_local_jacket(mid: int, diff_idx: int) -> bytes | None:
     return None
 
 
-async def upload_cover(cover_bytes: bytes) -> dict:
+async def get_cover_dict(cover_bytes: bytes) -> dict:
     """Upload song cover to Imgur and cache the result + accent color."""
     cover_hash = hashlib.md5(cover_bytes).hexdigest()
     cache_file = CACHE_DIR / f"{cover_hash}.json"
@@ -255,6 +265,11 @@ def parse_music_db() -> tuple[dict[int, str], dict[int, dict[int, float]]]:
                     else f"ID: {mid}"
                 )
                 title_map[mid] = title
+                artist_db[mid] = (
+                    info.findtext("artist_name", "Unknown artist")
+                    if info is not None
+                    else "Unknown artist"
+                )
 
                 diff_node = music.find("difficulty")
                 if diff_node is not None:
@@ -403,7 +418,7 @@ async def watch_score_log():
 
             cover_bytes = find_local_jacket(mid, diff_idx)
             if cover_bytes:
-                cover_meta = await upload_cover(cover_bytes)
+                cover_meta = await get_cover_dict(cover_bytes)
                 cover_url = cover_meta.get("url")
                 dominant_rgb = cover_meta.get("dominant_rgb")
                 if dominant_rgb and len(dominant_rgb) == 3:
@@ -461,9 +476,93 @@ async def watch_score_log_error(error):
 
 
 # MISC COMMANDS
+
+
+def format_top_plays(plays: list[dict]) -> str:
+    lines = []
+    for rank, play in enumerate(plays[:10], 1):
+        mid, difficulty = play["music_id"], play["diff_idx"]
+        artist = discord.utils.escape_markdown(
+            str(artist_db.get(mid, "Unknown artist"))
+        )[:120]
+        title = discord.utils.escape_markdown(str(title_db.get(mid, f"Music #{mid}")))[
+            :160
+        ]
+        level = level_db.get(mid, {}).get(difficulty, 0.0)
+        lines.append(
+            f"{rank}. {artist} - {title} - {DIFF_NAMES.get(difficulty, 'UNK')} "
+            f"({level:.1f}) - `{play['play_vf']:.3f}`"
+        )
+    return "\n".join(lines)
+
+
+@bot.slash_command(
+    name="top-plays",
+    description=f"Show {USERNAME}'s top 10 non-Crash plays by VolForce. Defaults to week."[:100],
+    integration_types={
+        discord.IntegrationType.guild_install,
+        discord.IntegrationType.user_install,
+    },
+)
+async def top_plays(
+    ctx: discord.ApplicationContext,
+    period: discord.Option(
+        str, choices=["day", "week", "month", "3 months", "all time"]
+    ) = "week",  # type: ignore
+) -> None:
+    await ctx.defer()
+    days = {"day": 1, "week": 7, "month": 30, "3 months": 90, "all time": 0}[period]
+    try:
+        plays = await asyncio.to_thread(
+            load_play_history, SCORE_LOG_PATH, USER_ID, USER_ID, level_db, days
+        )
+        ranked = sorted(
+            plays, key=lambda play: (play["play_vf"], play["timestamp"]), reverse=True
+        )
+        best = []
+        seen_songs = set()
+        for play in ranked:
+            if play["music_id"] in seen_songs:
+                continue
+            seen_songs.add(play["music_id"])
+            best.append(play)
+            if len(best) == 10:
+                break
+        if not best:
+            await ctx.respond(
+                f"No non-Crash plays recorded for {USERNAME} in that period."
+            )
+            return
+        embed = discord.Embed(
+            title=f"Top 10 Plays, {period}",
+            description=format_top_plays(best),
+            color=discord.Color(0xCBA6F7),
+        )
+        embed.set_footer(text="SDVX ∇ VolForce Tracker")
+        cover_bytes = await asyncio.to_thread(
+            find_local_jacket, best[0]["music_id"], best[0]["diff_idx"]
+        )
+        if cover_bytes:
+            dominant_rgb = await asyncio.to_thread(get_accent_color, cover_bytes)
+            embed.color = discord.Color.from_rgb(*dominant_rgb)
+            embed.set_thumbnail(url="attachment://best_play.png")
+            await ctx.respond(
+                embed=embed,
+                file=discord.File(BytesIO(cover_bytes), filename="best_play.png"),
+                allowed_mentions=discord.AllowedMentions.none(),
+            )
+        else:
+            await ctx.respond(
+                embed=embed, allowed_mentions=discord.AllowedMentions.none()
+            )
+    except (OSError, ValueError) as error:
+        logger.error("Top plays failed: %s", error)
+        await ctx.respond("Could not read top-play history.")
+
+
 @bot.slash_command(
     name="performance",
-    description="Graph bot owner's tracked current-play VolForce over time.",
+    description=f"Graph {USERNAME}'s tracked current-play VolForce over time."[:100],
     integration_types={
         discord.IntegrationType.guild_install,
         discord.IntegrationType.user_install,
@@ -474,21 +573,29 @@ async def performance(
     period: discord.Option(
         str, choices=["day", "week", "month", "3 months", "all time"]
     ) = "all time",  # type: ignore
+    exclude_under: discord.Option(
+        str, description="Exclude this difficulty and all lower difficulties.",
+        choices=list(DIFF_NAMES.values()),
+    ) = None,  # type: ignore
 ) -> None:
     await ctx.defer()
     days = {"day": 1, "week": 7, "month": 30, "3 months": 90, "all time": 0}[period]
     try:
         plays = await asyncio.to_thread(
-            load_performance_history, SCORE_LOG_PATH, USER_ID, USER_ID, level_db, days
+            load_performance_history, SCORE_LOG_PATH, USER_ID, USER_ID, level_db, days,
+            exclude_under=next((index for index, name in DIFF_NAMES.items() if name == exclude_under), None),
         )
         if not plays:
             await ctx.respond(
-                "No non-Crash plays recorded for the bot owner in that period.",
+                f"No non-Crash plays recorded for {USERNAME} matching the selected period and difficulty filter.",
             )
             return
         image = await asyncio.to_thread(
-            render_performance_graph, plays, f"VolForce History, {period}",
+            render_performance_graph,
+            plays,
+            f"Performance History, {period}",
             show_hours=period == "day",
+            exclude_difficulty=exclude_under,
         )
         await ctx.respond(file=discord.File(image, filename="performance.png"))
     except (OSError, ValueError) as error:

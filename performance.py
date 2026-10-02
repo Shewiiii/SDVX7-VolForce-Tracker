@@ -8,14 +8,13 @@ from io import BytesIO
 from PIL import Image, ImageDraw, ImageFont
 
 
-def load_performance_history(
+def load_play_history(
     log_path: str,
     user_id: int,
     default_user_id: int,
     levels: dict,
     days: int = 0,
-) -> list[tuple[datetime, float]]:
-    """Unattributed local plays belong only to the configured tracker owner."""
+) -> list[dict]:
     cutoff = datetime.now(timezone.utc) - timedelta(days=days) if days else None
     plays = []
     clears = {1: 50, 2: 100, 3: 102, 4: 106, 5: 110, 6: 104}
@@ -68,16 +67,39 @@ def load_performance_history(
                         // 1000000000000
                     ) / 1000
                 if math.isfinite(vf) and vf >= 0:
-                    plays.append((timestamp, vf))
+                    plays.append(
+                        dict(
+                            record,
+                            music_id=int(record["music_id"]),
+                            diff_idx=int(record["diff_idx"]),
+                            timestamp=timestamp,
+                            play_vf=vf,
+                        )
+                    )
             except (ValueError, TypeError, KeyError, AttributeError, OverflowError):
                 continue
-    return sorted(plays, key=lambda play: play[0])
+    return sorted(plays, key=lambda play: play["timestamp"])
+
+
+def load_performance_history(
+    log_path: str,
+    user_id: int,
+    default_user_id: int,
+    levels: dict,
+    days: int = 0,
+    exclude_under: int | None = None,
+) -> list[tuple[datetime, float]]:
+    return [
+        (play["timestamp"], play["play_vf"])
+        for play in load_play_history(log_path, user_id, default_user_id, levels, days)
+        if exclude_under is None or play["diff_idx"] > exclude_under
+    ]
 
 
 def render_performance_graph(
-    plays: list[tuple[datetime, float]], title: str, show_hours: bool = False
+    plays: list[tuple[datetime, float]], title: str, show_hours: bool = False,
+    exclude_difficulty: str | None = None,
 ) -> BytesIO:
-    """Purple scatter, rolling averages, and running best on a dark canvas."""
     if not plays:
         raise ValueError("No plays to graph")
     image = Image.new("RGB", (1500, 760), "#1e1e2e")
@@ -94,7 +116,11 @@ def render_performance_graph(
     small, regular, heading = font(17), font(21), font(29)
     muted, purple, dim = "#888ba6", "#cba6f7", "#6e5b88"
     draw.text((100, 35), title[:70], font=heading, fill=purple)
-    draw.text((100, 82), "VolForce of a play over time", font=small, fill=muted)
+    subtitle = "VolForce of a play over time"
+    if exclude_difficulty:
+        suffix = "" if exclude_difficulty == "NOV" else " and under"
+        subtitle += f", {exclude_difficulty}{suffix} excluded"
+    draw.text((100, 82), subtitle, font=small, fill=muted)
     left, top, right, bottom = 105, 155, 1410, 600
     draw.rectangle((left, top, right, bottom), fill="#1b1b29")
     start, end = plays[0][0].timestamp(), plays[-1][0].timestamp()
