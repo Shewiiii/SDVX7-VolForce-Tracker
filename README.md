@@ -40,7 +40,7 @@ npm install
 pip install -r requirements.txt
 ```
 - Create and fill a .env from the template (Imgur is optional)
-- Run `run_tracker.bat`, it will run the game as well. Create a shortcut of it for easy access !
+- Run `run_tracker.bat`, *then* start the game. Create a shortcut of it for easy access !
 
 > [!NOTE]  
 > If you use a virtual environment, replace the Python launcher line. Replace `venv` with whatever the name of your venv is.

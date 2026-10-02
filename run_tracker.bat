@@ -8,7 +8,5 @@ set "TRACKER_SCORE_LOG=%REPO_ROOT%score_log.txt"
 
 start "SDVX EA Proxy" /D "%RYUNET_ROOT%" "%ComSpec%" /k node -r "%RYUNET_ROOT%\node_modules\ts-node\register" "%REPO_ROOT%ea_proxy.ts"
 start "SDVX Discord Bot" /D "%REPO_ROOT%" "%ComSpec%" /k python "%REPO_ROOT%bot.py"
-timeout /t 2 /nobreak >nul
-start "SOUND VOLTEX" /D "%GAME_ROOT%" "%GAME_ROOT%\spice64.exe"
 
 endlocal
