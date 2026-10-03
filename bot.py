@@ -14,10 +14,18 @@ from pathlib import Path
 import aiohttp
 import discord
 from discord.ext import tasks
-from dotenv import dotenv_values, load_dotenv
+from dotenv import load_dotenv
 from PIL import Image
 
-from config import MUSIC_DB_PATH, PULLING_RATE, SCORE_LOG_PATH
+from config import (
+    CACHE_DIR,
+    DIFF_NAMES,
+    EXCLUDE_DIFF_IN_HISTORY,
+    MUSIC_DB_PATH,
+    PULLING_RATE,
+    SCORE_LOG_PATH,
+    USERNAME,
+)
 from performance import (
     best_play_message,
     load_performance_history,
@@ -36,22 +44,9 @@ if not BOT_TOKEN or not USER_ID_RAW:
     raise ValueError("Missing BOT_TOKEN or USER_ID in .env file")
 
 USER_ID = int(USER_ID_RAW)
-USERNAME = (
-    dotenv_values(Path(__file__).resolve().parent / ".env").get("USERNAME")
-    or "the player"
-).strip() or "the player"
 
-CACHE_DIR = Path("cache")
 CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
-DIFF_NAMES = {
-    0: "NOV",
-    1: "ADV",
-    2: "EXH",
-    3: "INF/VVD",
-    4: "MXM",
-    5: "ULT",
-}
 
 DIFF_SLOT_TAGS = {
     0: ("novice",),
@@ -595,7 +590,7 @@ async def performance(
         str,
         description="Exclude this difficulty and all lower difficulties.",
         choices=list(DIFF_NAMES.values()),
-    ) = None,  # type: ignore
+    ) = EXCLUDE_DIFF_IN_HISTORY,  # type: ignore
 ) -> None:
     await ctx.defer()
     days = {"day": 1, "week": 7, "month": 30, "3 months": 90, "all time": 0}[period]

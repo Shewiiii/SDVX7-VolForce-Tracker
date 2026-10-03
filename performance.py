@@ -1,11 +1,64 @@
 """Read local play history and render a Discord-friendly performance chart."""
 
 import json
+import logging
 import math
 from datetime import datetime, timedelta, timezone
 from io import BytesIO
+from pathlib import Path
 
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFilter, ImageFont, ImageOps
+
+from config import (
+    PERFORMANCE_ACCENT_COLOR,
+    PERFORMANCE_AVG_10_COLOR,
+    PERFORMANCE_BACKGROUND_BLUR,
+    PERFORMANCE_BACKGROUND_COLOR,
+    PERFORMANCE_BACKGROUND_DIM,
+    PERFORMANCE_BACKGROUND_PATH,
+    PERFORMANCE_BEST_COLOR,
+    PERFORMANCE_DIM_COLOR,
+    PERFORMANCE_GRID_COLOR,
+    PERFORMANCE_IMAGE_HEIGHT,
+    PERFORMANCE_IMAGE_WIDTH,
+    PERFORMANCE_PANEL_COLOR,
+    PERFORMANCE_PANEL_DIM,
+    PERFORMANCE_TEXT_COLOR,
+    REPO_ROOT,
+)
+
+
+def _performance_background(size: tuple[int, int]) -> Image.Image:
+    """Fit and soften a local wallpaper before drawing any chart elements."""
+    base = Image.new("RGB", size, PERFORMANCE_BACKGROUND_COLOR)
+    if PERFORMANCE_BACKGROUND_PATH is None:
+        return base
+    path = Path(PERFORMANCE_BACKGROUND_PATH)
+    if not path.is_absolute():
+        path = REPO_ROOT / path
+    try:
+        with Image.open(path) as source:
+            wallpaper = ImageOps.fit(
+                ImageOps.exif_transpose(source).convert("RGBA"),
+                size,
+                method=Image.Resampling.LANCZOS,
+            )
+        wallpaper = Image.alpha_composite(base.convert("RGBA"), wallpaper).convert(
+            "RGB"
+        )
+        wallpaper = wallpaper.filter(
+            ImageFilter.GaussianBlur(
+                max(0, PERFORMANCE_BACKGROUND_BLUR) * min(size[0] / 1500, size[1] / 760)
+            )
+        )
+        return Image.blend(wallpaper, base, min(1, max(0, PERFORMANCE_BACKGROUND_DIM)))
+    except (OSError, ValueError) as error:
+        logging.getLogger(__name__).warning(
+            "Could not load performance background %s; using solid color: %s",
+            path,
+            error,
+        )
+        return base
 
 
 def load_play_history(
@@ -100,7 +153,9 @@ def best_play_message(record: dict, history: list[dict]) -> str | None:
                 ranks[index] += 1
     for (period, _), rank in zip(periods, ranks):
         if rank <= 5:
-            ordinal = {1: "Best", 2: "2nd best", 3: "3rd best"}.get(rank, f"{rank}th best")
+            ordinal = {1: "Best", 2: "2nd best", 3: "3rd best"}.get(
+                rank, f"{rank}th best"
+            )
             return (
                 f"{ordinal} play of all time !"
                 if period == "all time"
@@ -132,10 +187,26 @@ def render_performance_graph(
 ) -> BytesIO:
     if not plays:
         raise ValueError("No plays to graph")
-    image = Image.new("RGB", (1500, 760), "#1e1e2e")
+    size = (PERFORMANCE_IMAGE_WIDTH, PERFORMANCE_IMAGE_HEIGHT)
+    if any(not isinstance(dimension, int) or dimension <= 0 for dimension in size):
+        raise ValueError("Performance image width and height must be positive integers")
+    scale_x, scale_y = size[0] / 1500, size[1] / 760
+    scale = min(scale_x, scale_y)
+
+    def sx(value):
+        return round(value * scale_x)
+
+    def sy(value):
+        return round(value * scale_y)
+
+    def pixels(value):
+        return max(1, round(value * scale))
+
+    image = _performance_background(size)
     draw = ImageDraw.Draw(image)
 
     def font(size: int):
+        size = pixels(size)
         for filename in ("DejaVuSansMono.ttf", "consola.ttf", "arial.ttf"):
             try:
                 return ImageFont.truetype(filename, size)
@@ -144,15 +215,25 @@ def render_performance_graph(
         return ImageFont.load_default(size=size)
 
     small, regular, heading = font(17), font(21), font(29)
-    muted, purple, dim = "#888ba6", "#cba6f7", "#6e5b88"
-    draw.text((100, 35), title[:70], font=heading, fill=purple)
+    muted, purple, dim = (
+        PERFORMANCE_TEXT_COLOR,
+        PERFORMANCE_ACCENT_COLOR,
+        PERFORMANCE_DIM_COLOR,
+    )
+    draw.text((sx(100), sy(35)), title[:70], font=heading, fill=purple)
     subtitle = "VolForce of a play over time"
     if exclude_difficulty:
         suffix = "" if exclude_difficulty == "NOV" else " and under"
         subtitle += f", {exclude_difficulty}{suffix} excluded"
-    draw.text((100, 82), subtitle, font=small, fill=muted)
-    left, top, right, bottom = 105, 155, 1410, 600
-    draw.rectangle((left, top, right, bottom), fill="#1b1b29")
+    draw.text((sx(100), sy(82)), subtitle, font=small, fill=muted)
+    left, top, right, bottom = sx(105), sy(155), sx(1410), sy(600)
+    # A translucent dark panel keeps the wallpaper visible under the plot.
+    panel_box = (left, top, right + 1, bottom + 1)
+    panel = image.crop(panel_box)
+    image.paste(
+        Image.blend(panel, Image.new("RGB", panel.size, PERFORMANCE_PANEL_COLOR), PERFORMANCE_PANEL_DIM),
+        (left, top),
+    )
     start, end = plays[0][0].timestamp(), plays[-1][0].timestamp()
     if end == start:
         start -= 30
@@ -170,9 +251,9 @@ def render_performance_graph(
 
     for index in range(11):
         y = top + index / 10 * (bottom - top)
-        draw.line((left, y, right, y), fill="#303043")
+        draw.line((left, y, right, y), fill=PERFORMANCE_GRID_COLOR, width=pixels(1))
         value = high - index / 10 * (high - low)
-        draw.text((left - 85, y - 10), f"{value:.3f}", font=small, fill=muted)
+        draw.text((left - sx(85), y - sy(10)), f"{value:.3f}", font=small, fill=muted)
     for index in range(6):
         timestamp = datetime.fromtimestamp(
             start + index / 5 * (end - start), timezone.utc
@@ -180,22 +261,23 @@ def render_performance_graph(
         x = left + index / 5 * (right - left)
         label = timestamp.strftime("%H:%M" if show_hours else "%d-%m-%Y")
         label_width = draw.textlength(label, font=small)
-        draw.text((x - label_width / 2, bottom + 16), label, font=small, fill=muted)
-    draw.text((left, top - 30), "VF", font=small, fill=muted)
+        draw.text((x - label_width / 2, bottom + sy(16)), label, font=small, fill=muted)
+    draw.text((left, top - sy(30)), "VF", font=small, fill=muted)
 
     best = 0
     best_points = []
+    radius = pixels(3)
     for timestamp, value in plays:
         x, y = point(timestamp, value)
-        draw.ellipse((x - 3, y - 3, x + 3, y + 3), fill=dim)
+        draw.ellipse((x - radius, y - radius, x + radius, y + radius), fill=dim)
         if best_points:
             best_points.append(point(timestamp, best))
         best = max(best, value)
         best_points.append(point(timestamp, best))
     if len(best_points) > 1:
-        draw.line(best_points, fill="#49415c", width=2)
+        draw.line(best_points, fill=PERFORMANCE_BEST_COLOR, width=pixels(2))
 
-    for window, color, width in ((10, "#8e73ad", 3), (100, purple, 4)):
+    for window, color, width in ((10, PERFORMANCE_AVG_10_COLOR, 3), (100, purple, 4)):
         points = []
         total = 0
         for index, (timestamp, value) in enumerate(plays):
@@ -204,20 +286,22 @@ def render_performance_graph(
                 total -= plays[index - window][1]
             points.append(point(timestamp, total / min(index + 1, window)))
         if len(points) > 1:
-            draw.line(points, fill=color, width=width, joint="curve")
+            draw.line(points, fill=color, width=pixels(width), joint="curve")
     draw.text(
-        (100, 697),
+        (sx(100), sy(697)),
         f"{len(plays):,} plays  |  Best {maximum:.3f}  |  Latest {plays[-1][1]:.3f}",
         font=regular,
         fill=muted,
     )
     for x, label, color in (
         (885, "Plays", dim),
-        (1045, "Avg 10", "#8e73ad"),
+        (1045, "Avg 10", PERFORMANCE_AVG_10_COLOR),
         (1230, "Avg 100", purple),
     ):
-        draw.ellipse((x, 702, x + 10, 712), fill=color)
-        draw.text((x + 22, 696), label, font=small, fill=muted)
+        draw.ellipse(
+            (sx(x), sy(702), sx(x) + pixels(10), sy(702) + pixels(10)), fill=color
+        )
+        draw.text((sx(x + 22), sy(696)), label, font=small, fill=muted)
     output = BytesIO()
     image.save(output, format="PNG")
     output.seek(0)
