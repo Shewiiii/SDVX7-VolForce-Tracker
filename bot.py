@@ -311,6 +311,37 @@ intents = discord.Intents.default()
 intents.message_content = True
 bot = discord.Bot(intents=intents)
 
+
+class CloseView(discord.ui.View):
+    """Let only the requester (or DM recipient) dismiss this message."""
+
+    def __init__(self, owner_id: int):
+        super().__init__(timeout=None)
+        self.owner_id = owner_id
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id == self.owner_id:
+            return True
+        await interaction.response.send_message(
+            "Only the person who requested this message can close it.", ephemeral=True
+        )
+        return False
+
+    @discord.ui.button(label="Close", style=discord.ButtonStyle.secondary)
+    async def close(self, button: discord.ui.Button, interaction: discord.Interaction):
+        await interaction.response.defer()
+        try:
+            await interaction.delete_original_response()
+        except discord.NotFound:
+            pass
+        except discord.HTTPException:
+            await interaction.followup.send(
+                "Could not close this message. Please try again.", ephemeral=True
+            )
+            return
+        self.stop()
+
+
 last_read_pos = 0
 
 
@@ -540,10 +571,13 @@ async def top_plays(
                 embed=embed,
                 file=discord.File(BytesIO(cover_bytes), filename="best_play.png"),
                 allowed_mentions=discord.AllowedMentions.none(),
+                view=CloseView(ctx.author.id),
             )
         else:
             await ctx.respond(
-                embed=embed, allowed_mentions=discord.AllowedMentions.none()
+                embed=embed,
+                allowed_mentions=discord.AllowedMentions.none(),
+                view=CloseView(ctx.author.id),
             )
     except (OSError, ValueError) as error:
         logger.error("Top plays failed: %s", error)
@@ -666,11 +700,13 @@ def build_profile_embed(snapshot: dict | None, history: list[dict]) -> discord.E
                 pass
         embed.add_field(name="Last captured", value=captured, inline=False)
         if not player:
-            embed.description = "Log in with your card through the updated tracker to capture account details."
+            embed.description = (
+                "Log into the game with your card to capture account details."
+            )
     else:
         embed.description = (
-            "Account details and Total VolForce are unavailable. Log in with your card "
-            "through the updated tracker to capture your saved profile."
+            "Account details and Total VolForce are unavailable. Log into the game"
+            " with your card to capture your saved profile."
         )
     if history:
         values = [play["play_vf"] for play in history]
@@ -721,13 +757,18 @@ async def profile(ctx: discord.ApplicationContext) -> None:
             BytesIO(card_bytes), filename="appeal_card.png"
         )
     await ctx.respond(
-        embed=embed, allowed_mentions=discord.AllowedMentions.none(), **attachment
+        embed=embed,
+        allowed_mentions=discord.AllowedMentions.none(),
+        view=CloseView(ctx.author.id),
+        **attachment,
     )
 
 
 @bot.slash_command(
     name="performance",
-    description=f"Graph {USERNAME}'s tracked current-play VolForce over time. Exclude NOV by default."[:100],
+    description=f"Graph {USERNAME}'s tracked current-play VolForce over time. Exclude NOV by default."[
+        :100
+    ],
     integration_types={
         discord.IntegrationType.guild_install,
         discord.IntegrationType.user_install,
@@ -775,7 +816,10 @@ async def performance(
             exclude_difficulty=exclude_under,
             total_volforce=snapshot["value"] if snapshot else None,
         )
-        await ctx.respond(file=discord.File(image, filename="performance.png"))
+        await ctx.respond(
+            file=discord.File(image, filename="performance.png"),
+            view=CloseView(ctx.author.id),
+        )
     except (OSError, ValueError) as error:
         logger.error("Performance graph failed: %s", error)
         await ctx.respond("Could not read or render performance history.")
