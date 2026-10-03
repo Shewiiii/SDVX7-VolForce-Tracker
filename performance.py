@@ -221,7 +221,7 @@ def render_performance_graph(
         PERFORMANCE_DIM_COLOR,
     )
     draw.text((sx(100), sy(35)), title[:70], font=heading, fill=purple)
-    subtitle = "VolForce of a play over time"
+    subtitle = "VolForce of plays over time"
     if exclude_difficulty:
         suffix = "" if exclude_difficulty == "NOV" else " and under"
         subtitle += f", {exclude_difficulty}{suffix} excluded"
@@ -231,7 +231,11 @@ def render_performance_graph(
     panel_box = (left, top, right + 1, bottom + 1)
     panel = image.crop(panel_box)
     image.paste(
-        Image.blend(panel, Image.new("RGB", panel.size, PERFORMANCE_PANEL_COLOR), PERFORMANCE_PANEL_DIM),
+        Image.blend(
+            panel,
+            Image.new("RGB", panel.size, PERFORMANCE_PANEL_COLOR),
+            PERFORMANCE_PANEL_DIM,
+        ),
         (left, top),
     )
     start, end = plays[0][0].timestamp(), plays[-1][0].timestamp()
@@ -240,6 +244,7 @@ def render_performance_graph(
         end += 30
     maximum = max(value for _, value in plays)
     minimum = min(value for _, value in plays)
+    average = math.fsum(value for _, value in plays) / len(plays)
     padding = max((maximum - minimum) * 0.12, 0.015)
     low, high = max(0, minimum - padding), maximum + padding
 
@@ -289,7 +294,7 @@ def render_performance_graph(
             draw.line(points, fill=color, width=pixels(width), joint="curve")
     draw.text(
         (sx(100), sy(697)),
-        f"{len(plays):,} plays  |  Best {maximum:.3f}  |  Latest {plays[-1][1]:.3f}",
+        f"{len(plays):,} plays  |  Best {maximum:.3f}  |  Average {average:.3f}",
         font=regular,
         fill=muted,
     )
