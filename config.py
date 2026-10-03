@@ -2,7 +2,7 @@ import logging
 import sys
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
+REPO_ROOT = Path(__file__).resolve().parent
 GAME_ROOT = REPO_ROOT.parent
 
 SCORE_LOG_PATH = str(REPO_ROOT / "score_log.txt")
