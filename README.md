@@ -9,6 +9,9 @@ The script observes the game's e-amusement result requests through a local proxy
 	<img src="img/rasis.jpg" alt="Rasis sending play results" width="400">
 </p>
 <p>
+	<img src="img/profile.jpg" alt="Profile embed" width="700">
+</p>
+<p>
 	<img src="img/top-plays.jpg" alt="Top Plays embed" width="700">
 </p>
 <p>
@@ -47,7 +50,7 @@ npm install
 pip install -r requirements.txt
 ```
 
-- Create and fill a .env from the template (Imgur is optional)
+- Create and fill a .env from the template.
 - Run `run_tracker.bat`, _then_ start the game. Create a shortcut of it for easy access !
 
 > [!NOTE]  

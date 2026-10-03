@@ -184,6 +184,7 @@ def render_performance_graph(
     title: str,
     show_hours: bool = False,
     exclude_difficulty: str | None = None,
+    total_volforce: float | None = None,
 ) -> BytesIO:
     if not plays:
         raise ValueError("No plays to graph")
@@ -294,7 +295,9 @@ def render_performance_graph(
             draw.line(points, fill=color, width=pixels(width), joint="curve")
     draw.text(
         (sx(100), sy(697)),
-        f"{len(plays):,} plays  |  Best {maximum:.3f}  |  Average {average:.3f}",
+        f"{len(plays):,} plays  |  Best {maximum:.3f}  |  Average {average:.3f}"
+        + "  |  Total VolForce "
+        + (f"{total_volforce:.3f}" if total_volforce is not None else "unavailable"),
         font=regular,
         fill=muted,
     )
@@ -304,9 +307,9 @@ def render_performance_graph(
         (1230, "Avg 100", purple),
     ):
         draw.ellipse(
-            (sx(x), sy(702), sx(x) + pixels(10), sy(702) + pixels(10)), fill=color
+            (sx(x), sy(115), sx(x) + pixels(10), sy(115) + pixels(10)), fill=color
         )
-        draw.text((sx(x + 22), sy(696)), label, font=small, fill=muted)
+        draw.text((sx(x + 22), sy(109)), label, font=small, fill=muted)
     output = BytesIO()
     image.save(output, format="PNG")
     output.seek(0)

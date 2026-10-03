@@ -5,6 +5,10 @@ const https = require("https");
 const path = require("path");
 const querystring = require("querystring");
 const fs = require("fs");
+const { TotalVolforceStore } = require("./total_volforce");
+const totalVolforce = new TotalVolforceStore(
+    path.join(__dirname, "cache", "total_volforce.json"),
+);
 
 const listenPort = Number(process.env.TRACKER_PROXY_PORT || 8080);
 const upstreamUrl = new URL(
@@ -147,10 +151,11 @@ function findTracks(value, result = []) {
     return result;
 }
 
-function decodeRequest(req, raw) {
-    let body = raw;
-    let compressed = String(req.headers["x-compress"] || "none");
-    const contentType = String(req.headers["content-type"] || "");
+function decodePayload(headers, raw) {
+    // Decoders operate on a copy; forwarding always retains the original bytes.
+    let body = Buffer.from(raw);
+    const compressed = String(headers["x-compress"] || "none");
+    const contentType = String(headers["content-type"] || "");
 
     if (contentType.includes("application/x-www-form-urlencoded")) {
         const form = querystring.parse(raw.toString("utf8"));
@@ -159,13 +164,20 @@ function decodeRequest(req, raw) {
                 "EaCloud form payloads are not supported by this sidecar yet.",
             );
         }
-    } else if (req.headers["x-eamuse-info"]) {
-        body = new KonmaiEncrypt(String(req.headers["x-eamuse-info"])).encrypt(
+    } else if (headers["x-eamuse-info"]) {
+        body = new KonmaiEncrypt(String(headers["x-eamuse-info"])).encrypt(
             body,
         );
     }
 
     if (compressed === "lz77") body = LzKN.inflate(body);
+    else if (compressed !== "none")
+        throw new Error(`Unsupported X-Compress: ${compressed}`);
+    if (
+        headers["content-encoding"] &&
+        headers["content-encoding"] !== "identity"
+    )
+        throw new Error("Unsupported HTTP Content-Encoding");
 
     let data;
     let encoding = "utf8";
@@ -177,6 +189,11 @@ function decodeRequest(req, raw) {
         data = KBin.xmlToData(body, encoding);
     }
 
+    return { data, encoding };
+}
+
+function decodeRequest(req, raw) {
+    const { data, encoding } = decodePayload(req.headers, raw);
     const call = data.call || {};
     const moduleName = call["@attr"]
         ? Object.keys(call).find((key) => key !== "@attr")
@@ -420,6 +437,15 @@ const server = http.createServer((req, res) => {
     req.on("data", (chunk) => chunks.push(chunk));
     req.on("end", () => {
         const body = Buffer.concat(chunks);
+        let decodedRequest;
+        try {
+            if (req.method === "POST") {
+                decodedRequest = decodeRequest(req, body);
+                writeResults(decodedRequest);
+            }
+        } catch (error) {
+            console.error("Could not decode request:", error.message);
+        }
         let target;
         try {
             target = forwardingTarget(req.url || "/");
@@ -450,6 +476,38 @@ const server = http.createServer((req, res) => {
                 );
                 upstreamResponse.on("end", () => {
                     const upstreamBody = Buffer.concat(responseChunks);
+                    if (
+                        upstreamResponse.statusCode === 200 &&
+                        [
+                            "game.sv7_load",
+                            "game.sv7_load_m",
+                            "game.sv7_save_m",
+                            "game.sv7_save",
+                        ].includes(decodedRequest?.route)
+                    ) {
+                        try {
+                            const response = decodePayload(
+                                upstreamResponse.headers,
+                                upstreamBody,
+                            ).data;
+                            const refid =
+                                field(decodedRequest.data, "refid") ||
+                                field(decodedRequest.data, "dataid");
+                            totalVolforce.capture(
+                                decodedRequest.route,
+                                refid,
+                                response.response?.game,
+                                findTracks(decodedRequest.data),
+                                field,
+                                decodedRequest.data,
+                            );
+                        } catch (error) {
+                            console.error(
+                                "Could not capture player profile:",
+                                error.message,
+                            );
+                        }
+                    }
                     const responseBody =
                         upstreamResponse.statusCode === 200
                             ? rewriteServicesResponse(
@@ -490,12 +548,6 @@ const server = http.createServer((req, res) => {
         });
         upstream.write(body);
         upstream.end();
-
-        try {
-            if (req.method === "POST") writeResults(decodeRequest(req, body));
-        } catch (error) {
-            console.error("Could not decode request:", error.message);
-        }
     });
 });
 

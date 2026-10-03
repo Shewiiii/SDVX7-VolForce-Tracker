@@ -4,13 +4,14 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent
 GAME_ROOT = REPO_ROOT.parent
-CACHE_DIR = Path("cache")
 
 SCORE_LOG_PATH = str(REPO_ROOT / "score_log.txt")
+TOTAL_VOLFORCE_CACHE_PATH = REPO_ROOT / "cache" / "total_volforce.json"
 MUSIC_DB_PATH = str(GAME_ROOT / "data" / "others" / "music_db.xml")
 PULLING_RATE = 1
 
 USERNAME = "the player"
+FOOTER = "SDVX ∇ VolForce Tracker"
 
 DIFF_NAMES = {
     0: "NOV",

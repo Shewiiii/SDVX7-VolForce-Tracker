@@ -1,5 +1,4 @@
 import asyncio
-import hashlib
 import json
 import logging
 import math
@@ -8,22 +7,24 @@ import re
 import xml.etree.ElementTree as ET
 from collections import Counter
 from colorsys import rgb_to_hsv
+from datetime import datetime
+from functools import lru_cache
 from io import BytesIO
 from pathlib import Path
 
-import aiohttp
 import discord
 from discord.ext import tasks
 from dotenv import load_dotenv
 from PIL import Image
 
 from config import (
-    CACHE_DIR,
     DIFF_NAMES,
     EXCLUDE_DIFF_IN_HISTORY,
+    FOOTER,
     MUSIC_DB_PATH,
     PULLING_RATE,
     SCORE_LOG_PATH,
+    TOTAL_VOLFORCE_CACHE_PATH,
     USERNAME,
 )
 from performance import (
@@ -32,21 +33,18 @@ from performance import (
     load_play_history,
     render_performance_graph,
 )
+from total_volforce import load_total_volforce
 
 logger = logging.getLogger("sdvx_bot")
 
 load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 USER_ID_RAW = os.getenv("USER_ID")
-IMGUR_CLIENT_ID = os.getenv("IMGUR_CLIENT_ID")
 
 if not BOT_TOKEN or not USER_ID_RAW:
     raise ValueError("Missing BOT_TOKEN or USER_ID in .env file")
 
 USER_ID = int(USER_ID_RAW)
-
-CACHE_DIR.mkdir(parents=True, exist_ok=True)
-
 
 DIFF_SLOT_TAGS = {
     0: ("novice",),
@@ -60,7 +58,7 @@ DIFF_SLOT_TAGS = {
 artist_db = {}
 
 
-# COLOR EXTRACTION & IMGUR UPLOAD
+# LOCAL IMAGES & COLOR EXTRACTION
 
 
 def get_accent_color(image_bytes: bytes, threshold: int = 50) -> tuple[int, int, int]:
@@ -144,58 +142,37 @@ def find_local_jacket(mid: int, diff_idx: int) -> bytes | None:
     return None
 
 
-async def get_cover_dict(cover_bytes: bytes) -> dict:
-    """Upload song cover to Imgur and cache the result + accent color."""
-    cover_hash = hashlib.md5(cover_bytes).hexdigest()
-    cache_file = CACHE_DIR / f"{cover_hash}.json"
-
-    if cache_file.is_file():
-        try:
-            with open(cache_file, "r", encoding="utf-8") as f:  # noqa: ASYNC230
-                return json.load(f)
-        except (OSError, json.JSONDecodeError) as err:
-            logger.debug("Cache read failed for %s, regenerating: %s", cache_file, err)
-
-    dominant_rgb = get_accent_color(cover_bytes)
-    url = None
-
-    if IMGUR_CLIENT_ID:
-        try:
-            headers = {"Authorization": f"Client-ID {IMGUR_CLIENT_ID}"}
-            form = aiohttp.FormData()
-            form.add_field("image", cover_bytes)
-
-            async with (
-                aiohttp.ClientSession() as session,
-                session.post(
-                    "https://api.imgur.com/3/image", headers=headers, data=form
-                ) as resp,
-            ):
-                if resp.status == 200:
-                    data = await resp.json()
-                    url = data.get("data", {}).get("link")
-                else:
-                    logger.error(
-                        "Imgur upload failed (status %d): %s",
-                        resp.status,
-                        await resp.text(),
-                    )
-        except (aiohttp.ClientError, OSError) as e:
-            logger.error("Imgur request error: %s", e)
-
-    result = {
-        "url": url,
-        "cover_hash": cover_hash,
-        "dominant_rgb": list(dominant_rgb),
-    }
-
+@lru_cache(maxsize=1)
+def load_appeal_card_textures() -> dict[int, str]:
+    """Use the game's mapping: card IDs do not always match texture filenames."""
+    path = Path(MUSIC_DB_PATH).parent / "appeal_card.xml"
     try:
-        with open(cache_file, "w", encoding="utf-8") as f:  # noqa: ASYNC230
-            json.dump(result, f, indent=2)
-    except (OSError, TypeError) as e:
-        logger.warning("Failed writing cache file %s: %s", cache_file, e)
+        raw = path.read_text(encoding="cp932", errors="replace")
+        root = ET.fromstring(re.sub(r"<\?xml[^>]*\?>", "", raw, count=1))
+        textures = {}
+        for card in root.findall("card"):
+            texture = card.findtext("info/texture", "").strip()
+            card_id = card.get("id", "")
+            if card_id.isdecimal() and re.fullmatch(r"[A-Za-z0-9_]+", texture):
+                textures[int(card_id)] = texture
+        return textures
+    except (OSError, ET.ParseError, ValueError) as error:
+        logger.warning("Could not load appeal-card artwork mapping: %s", error)
+        return {}
 
-    return result
+
+def find_local_appeal_card(appeal_id: int | None) -> bytes | None:
+    if type(appeal_id) is not int or appeal_id < 0:
+        return None
+    texture = load_appeal_card_textures().get(appeal_id)
+    if not texture:
+        return None
+    path = Path(MUSIC_DB_PATH).parent.parent / "graphics" / "ap_card" / f"{texture}.png"
+    try:
+        return path.read_bytes()
+    except OSError as error:
+        logger.debug("Could not read appeal-card image %s: %s", path, error)
+        return None
 
 
 # DATABASE & VOLFORCE
@@ -314,7 +291,7 @@ def format_score_breakdown(data: dict) -> str:
         value = counts.get(key)
         if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
             return f"{value:,}"
-        return "—"
+        return "-"
 
     if not counts:
         return "Judgment counts were not provided in this result."
@@ -410,16 +387,12 @@ async def watch_score_log():
             _, grade_name = get_grade_coeff(score)
 
             # Determine cover image & accent color
-            cover_url = None
             embed_color = discord.Color(0xE0218A)
 
-            cover_bytes = find_local_jacket(mid, diff_idx)
+            cover_bytes = await asyncio.to_thread(find_local_jacket, mid, diff_idx)
             if cover_bytes:
-                cover_meta = await get_cover_dict(cover_bytes)
-                cover_url = cover_meta.get("url")
-                dominant_rgb = cover_meta.get("dominant_rgb")
-                if dominant_rgb and len(dominant_rgb) == 3:
-                    embed_color = discord.Color.from_rgb(*dominant_rgb)
+                dominant_rgb = await asyncio.to_thread(get_accent_color, cover_bytes)
+                embed_color = discord.Color.from_rgb(*dominant_rgb)
 
             clear_names = {
                 1: "Crash (×0.50)",
@@ -441,15 +414,19 @@ async def watch_score_log():
                 color=embed_color,
             )
 
-            if cover_url:
-                embed.set_thumbnail(url=cover_url)
+            attachment = {}
+            if cover_bytes:
+                embed.set_thumbnail(url="attachment://jacket.png")
+                attachment["file"] = discord.File(
+                    BytesIO(cover_bytes), filename="jacket.png"
+                )
 
             embed.add_field(
                 name="Score breakdown",
                 value=format_score_breakdown(data),
                 inline=False,
             )
-            embed.set_footer(text="SDVX ∇ VolForce Tracker")
+            embed.set_footer(text=FOOTER)
             ranking_content = None
             if clear_type != 1:
                 try:
@@ -464,7 +441,7 @@ async def watch_score_log():
                     ranking_content = best_play_message(data, ranking_history)
                 except (OSError, ValueError, TypeError, KeyError) as error:
                     logger.warning("Could not rank current play: %s", error)
-            await user.send(content=ranking_content, embed=embed)
+            await user.send(content=ranking_content, embed=embed, **attachment)
             logger.info("Sent VolForce DM for mid=%d (%s) to %s", mid, song_title, user)
         except discord.Forbidden:
             logger.error(
@@ -501,8 +478,8 @@ def format_top_plays(plays: list[dict]) -> str:
         ]
         level = level_db.get(mid, {}).get(difficulty, 0.0)
         lines.append(
-            f"{rank}. {artist} - {title} - {DIFF_NAMES.get(difficulty, 'UNK')} "
-            f"({level:.1f}) - `{play['play_vf']:.3f}`"
+            f"{rank}. {artist} - {title}  |  {DIFF_NAMES.get(difficulty, 'UNK')} "
+            f"({level:.1f})  |  `{play['play_vf']:.3f}`"
         )
     return "\n".join(lines)
 
@@ -551,7 +528,7 @@ async def top_plays(
             description=format_top_plays(best),
             color=discord.Color(0xCBA6F7),
         )
-        embed.set_footer(text="SDVX ∇ VolForce Tracker")
+        embed.set_footer(text=FOOTER)
         cover_bytes = await asyncio.to_thread(
             find_local_jacket, best[0]["music_id"], best[0]["diff_idx"]
         )
@@ -573,9 +550,184 @@ async def top_plays(
         await ctx.respond("Could not read top-play history.")
 
 
+def build_profile_embed(snapshot: dict | None, history: list[dict]) -> discord.Embed:
+    player = snapshot["player"] if snapshot else {}
+    name = discord.utils.escape_markdown(str(player.get("name") or USERNAME))[:100]
+    embed = discord.Embed(title=f"{name}'s Profile", color=discord.Color(0xCBA6F7))
+    code = player.get("sdvx_id") or player.get("code")
+    if code:
+        embed.add_field(name="SDVX ID", value=discord.utils.escape_markdown(str(code)))
+    dan_names = {
+        0: "Unranked",
+        1: "1st Dan",
+        2: "2nd Dan",
+        3: "3rd Dan",
+        **{level: f"{level}th Dan" for level in range(4, 12)},
+        12: "∞ Dan",
+    }
+    for key, label in (
+        ("skill_level", "Dan"),
+        # ("gamecoin_packet", "Packets (PC)"),
+        # ("gamecoin_block", "Blocks (BLC)"),
+        # ("blaster_energy", "Blaster energy"),  # Always at 100% anyways
+    ):
+        value = player.get(key)
+        if type(value) is int and value >= 0:
+            display = (
+                dan_names.get(value, f"Unknown Dan ({value})")
+                if key == "skill_level"
+                else f"{value:,}"
+            )
+            embed.add_field(name=label, value=display)
+
+    def chart_text(chart: dict) -> str:
+        mid, difficulty = chart["music_id"], chart["diff_idx"]
+        title = discord.utils.escape_markdown(str(title_db.get(mid, f"Music #{mid}")))[
+            :160
+        ]
+        level = level_db.get(mid, {}).get(difficulty)
+        label = DIFF_NAMES.get(difficulty, "UNK")
+        if level is not None:
+            label += f" ({level:.1f})"
+        return f"`{chart['volforce']:.3f}`\n{title} · {label}"
+
+    if snapshot:
+        embed.add_field(name="Total VolForce", value=f"`{snapshot['value']:.3f}`")
+        embed.add_field(
+            name="Saved charts",
+            value=f"{snapshot['chart_count']:,} charts across {snapshot['song_count']:,} songs",
+        )
+        if snapshot["best_chart"]:
+            embed.add_field(
+                name="Best chart VolForce",
+                value=chart_text(snapshot["best_chart"]),
+                inline=False,
+            )
+            worst = snapshot["worst_top_chart"]
+            value = chart_text(worst)
+            embed.add_field(name="Lowest VolForce in top 50", value=value, inline=False)
+            embed.add_field(
+                name="Top 50 average", value=f"`{snapshot['top_average']:.3f}`"
+            )
+
+        records = snapshot["chart_records"]
+        if records:
+            clears = Counter(record["clear_type"] for record in records.values())
+            clear_names = {
+                0: "No clear",
+                1: "Crash",
+                2: "Effective",
+                3: "Excessive",
+                4: "Maxxive",
+                5: "UC",
+                6: "PUC",
+            }
+            embed.add_field(
+                name="Clear Marks",
+                value=" · ".join(
+                    f"{clear_names[clear]}: {count:,}"
+                    for clear, count in sorted(clears.items())
+                ),
+                inline=False,
+            )
+            grades = Counter(
+                get_grade_coeff(record["score"])[1] for record in records.values()
+            )
+            embed.add_field(
+                name="Grades",
+                value=" · ".join(
+                    f"{grade}: {grades[grade]:,}"
+                    for grade in (
+                        "S",
+                        "AAA+",
+                        "AAA",
+                        "AA+",
+                        "AA",
+                        "A+",
+                        "A",
+                        "B",
+                        "C",
+                        "D",
+                    )
+                    if grades[grade]
+                ),
+                inline=False,
+            )
+        updated = int(snapshot["updated_at"].timestamp())
+        captured = f"Charts: <t:{updated}:f> (<t:{updated}:R>)"
+        if snapshot["player_updated_at"]:
+            try:
+                timestamp = datetime.fromisoformat(
+                    snapshot["player_updated_at"].replace("Z", "+00:00")
+                )
+                if timestamp.tzinfo is not None:
+                    captured += f"\nAccount details: <t:{int(timestamp.timestamp())}:f>"
+            except (ValueError, TypeError, AttributeError):
+                pass
+        embed.add_field(name="Last captured", value=captured, inline=False)
+        if not player:
+            embed.description = "Log in with your card through the updated tracker to capture account details."
+    else:
+        embed.description = (
+            "Account details and Total VolForce are unavailable. Log in with your card "
+            "through the updated tracker to capture your saved profile."
+        )
+    if history:
+        values = [play["play_vf"] for play in history]
+        first, last = (
+            int(history[index]["timestamp"].timestamp()) for index in (0, -1)
+        )
+        embed.add_field(
+            name="Tracked non-Crash plays",
+            value=f"{len(history):,} plays · Best {max(values):.3f} · Average {math.fsum(values) / len(values):.3f}"
+            f"\nFirst: <t:{first}:f>\nLatest: <t:{last}:f>",
+            inline=False,
+        )
+    else:
+        embed.add_field(
+            name="Tracked non-Crash plays",
+            value="No local history available.",
+            inline=False,
+        )
+    embed.set_footer(text=f"{FOOTER} · RyuNET")
+    return embed
+
+
+@bot.slash_command(
+    name="profile",
+    description=f"Show {USERNAME}'s account, chart stats and top-50 VolForce."[:100],
+    integration_types={
+        discord.IntegrationType.guild_install,
+        discord.IntegrationType.user_install,
+    },
+)
+async def profile(ctx: discord.ApplicationContext) -> None:
+    await ctx.defer()
+    snapshot = await asyncio.to_thread(load_total_volforce, TOTAL_VOLFORCE_CACHE_PATH)
+    try:
+        history = await asyncio.to_thread(
+            load_play_history, SCORE_LOG_PATH, USER_ID, USER_ID, level_db
+        )
+    except (OSError, ValueError) as error:
+        logger.warning("Could not load profile's local history: %s", error)
+        history = []
+    embed = build_profile_embed(snapshot, history)
+    appeal_id = snapshot["player"].get("appeal_id") if snapshot else None
+    card_bytes = await asyncio.to_thread(find_local_appeal_card, appeal_id)
+    attachment = {}
+    if card_bytes:
+        embed.set_thumbnail(url="attachment://appeal_card.png")
+        attachment["file"] = discord.File(
+            BytesIO(card_bytes), filename="appeal_card.png"
+        )
+    await ctx.respond(
+        embed=embed, allowed_mentions=discord.AllowedMentions.none(), **attachment
+    )
+
+
 @bot.slash_command(
     name="performance",
-    description=f"Graph {USERNAME}'s tracked current-play VolForce over time."[:100],
+    description=f"Graph {USERNAME}'s tracked current-play VolForce over time. Exclude NOV by default."[:100],
     integration_types={
         discord.IntegrationType.guild_install,
         discord.IntegrationType.user_install,
@@ -612,12 +764,16 @@ async def performance(
                 f"No non-Crash plays recorded for {USERNAME} matching the selected period and difficulty filter.",
             )
             return
+        snapshot = await asyncio.to_thread(
+            load_total_volforce, TOTAL_VOLFORCE_CACHE_PATH
+        )
         image = await asyncio.to_thread(
             render_performance_graph,
             plays,
             f"Performance History, {period}",
             show_hours=period == "day",
             exclude_difficulty=exclude_under,
+            total_volforce=snapshot["value"] if snapshot else None,
         )
         await ctx.respond(file=discord.File(image, filename="performance.png"))
     except (OSError, ValueError) as error:
