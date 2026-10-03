@@ -6,16 +6,16 @@ They are sent in Discord DMs via a local bot.
 The script observes the game's e-amusement result requests through a local proxy and forwards them unchanged to Ryu's server.
 
 <p>
-	<img src="img/rasis.jpg" alt="Rasis sending play results" width="400">
+	<img src="assets/img/rasis.jpg" alt="Rasis sending play results" width="400">
 </p>
 <p>
-	<img src="img/profile.jpg" alt="Profile embed" width="700">
+	<img src="assets/img/profile.jpg" alt="Profile embed" width="700">
 </p>
 <p>
-	<img src="img/top-plays.jpg" alt="Top Plays embed" width="700">
+	<img src="assets/img/top-plays.jpg" alt="Top Plays embed" width="700">
 </p>
 <p>
-	<img src="img/performance.png" alt="VolForce Performance History embed" width="700">
+	<img src="assets/img/performance.png" alt="VolForce Performance History embed" width="700">
 </p>
 
 ## Setup
@@ -28,11 +28,14 @@ The script observes the game's e-amusement result requests through a local proxy
 SOUND VOLTEX NABLA/
 ...
 |-- SDVX7-VolForce-Tracker-main/
-	|-- bot.py
-	|-- ea_proxy.ts
-	|-- run_tracker.bat
+	|-- assets/
+	|-- proxy/
 	|-- RyuNET-core-master/
-		...
+	|-- tracker/
+	|-- .env
+	|-- .gitignore
+	|-- bot.py
+	...
 ```
 
 - Install the RyuNET-core Node.js dependencies once, so the local proxy can reuse its protocol decoders:
@@ -51,6 +54,7 @@ pip install -r requirements.txt
 ```
 
 - Create and fill a .env from the template.
+- Edit `tracker/config.py` to customize the username, paths, and performance graph.
 - Run `run_tracker.bat`, _then_ start the game. Create a shortcut of it for easy access !
 
 > [!NOTE]  

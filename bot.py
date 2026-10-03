@@ -27,13 +27,13 @@ from config import (
     TOTAL_VOLFORCE_CACHE_PATH,
     USERNAME,
 )
-from performance import (
+from tracker.performance import (
     best_play_message,
     load_performance_history,
     load_play_history,
     render_performance_graph,
 )
-from total_volforce import load_total_volforce
+from tracker.total_volforce import load_total_volforce
 
 logger = logging.getLogger("sdvx_bot")
 

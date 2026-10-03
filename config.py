@@ -2,7 +2,7 @@ import logging
 import sys
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parent
+REPO_ROOT = Path(__file__).resolve().parent.parent
 GAME_ROOT = REPO_ROOT.parent
 
 SCORE_LOG_PATH = str(REPO_ROOT / "score_log.txt")
@@ -10,7 +10,7 @@ TOTAL_VOLFORCE_CACHE_PATH = REPO_ROOT / "cache" / "total_volforce.json"
 MUSIC_DB_PATH = str(GAME_ROOT / "data" / "others" / "music_db.xml")
 PULLING_RATE = 1
 
-USERNAME = "the player"
+USERNAME = "Shewi"
 FOOTER = "SDVX ∇ VolForce Tracker"
 
 DIFF_NAMES = {
@@ -25,8 +25,9 @@ EXCLUDE_DIFF_IN_HISTORY = "NOV"  # and under. Set it to None to disable
 
 PERFORMANCE_IMAGE_WIDTH = 3000
 PERFORMANCE_IMAGE_HEIGHT = 1520
+PERFORMANCE_FONT_PATH = REPO_ROOT / "assets" / "fonts" / "DejaVuSansMono.ttf"
 
-PERFORMANCE_BACKGROUND_PATH = REPO_ROOT / "img" / "performance-background.png"
+PERFORMANCE_BACKGROUND_PATH = REPO_ROOT / "assets" / "img" / "performance-background.png"
 PERFORMANCE_BACKGROUND_BLUR = 10
 PERFORMANCE_BACKGROUND_DIM = 0.67
 PERFORMANCE_PANEL_DIM = 0.65

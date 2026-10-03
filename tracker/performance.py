@@ -18,6 +18,7 @@ from config import (
     PERFORMANCE_BACKGROUND_PATH,
     PERFORMANCE_BEST_COLOR,
     PERFORMANCE_DIM_COLOR,
+    PERFORMANCE_FONT_PATH,
     PERFORMANCE_GRID_COLOR,
     PERFORMANCE_IMAGE_HEIGHT,
     PERFORMANCE_IMAGE_WIDTH,
@@ -207,13 +208,7 @@ def render_performance_graph(
     draw = ImageDraw.Draw(image)
 
     def font(size: int):
-        size = pixels(size)
-        for filename in ("DejaVuSansMono.ttf", "consola.ttf", "arial.ttf"):
-            try:
-                return ImageFont.truetype(filename, size)
-            except OSError:
-                pass
-        return ImageFont.load_default(size=size)
+        return ImageFont.truetype(str(PERFORMANCE_FONT_PATH), pixels(size))
 
     small, regular, heading = font(17), font(21), font(29)
     muted, purple, dim = (

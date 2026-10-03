@@ -6,15 +6,16 @@ const path = require("path");
 const querystring = require("querystring");
 const fs = require("fs");
 const { TotalVolforceStore } = require("./total_volforce");
+const repoRoot = path.resolve(__dirname, "..");
 const totalVolforce = new TotalVolforceStore(
-    path.join(__dirname, "cache", "total_volforce.json"),
+    path.join(repoRoot, "cache", "total_volforce.json"),
 );
 
 const listenPort = Number(process.env.TRACKER_PROXY_PORT || 8080);
 const upstreamUrl = new URL(
     process.env.TRACKER_UPSTREAM || "http://ea.ryu7w7.xyz",
 );
-const scoreLogPath = path.join(__dirname, "score_log.txt");
+const scoreLogPath = path.join(repoRoot, "score_log.txt");
 const ryuRoot = process.env.RYUNET_ROOT;
 
 if (!ryuRoot) {
@@ -28,7 +29,7 @@ const LzKN = require(path.join(ryuRoot, "src/utils/LzKN")).default;
 const KBin = require(path.join(ryuRoot, "src/utils/KBinJSON"));
 
 const musicDbPath = path.join(
-    __dirname,
+    repoRoot,
     "..",
     "data",
     "others",
