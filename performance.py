@@ -222,7 +222,7 @@ def render_performance_graph(
         PERFORMANCE_DIM_COLOR,
     )
     draw.text((sx(100), sy(35)), title[:70], font=heading, fill=purple)
-    subtitle = "VolForce of plays over time"
+    subtitle = "Chart VolForce over time"
     if exclude_difficulty:
         suffix = "" if exclude_difficulty == "NOV" else " and under"
         subtitle += f", {exclude_difficulty}{suffix} excluded"
