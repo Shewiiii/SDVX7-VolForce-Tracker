@@ -19,6 +19,7 @@ from PIL import Image
 
 from config import MUSIC_DB_PATH, PULLING_RATE, SCORE_LOG_PATH
 from performance import (
+    best_play_message,
     load_performance_history,
     load_play_history,
     render_performance_graph,
@@ -391,6 +392,7 @@ async def watch_score_log():
         logger.error("Failed to fetch user with ID %d: %s", USER_ID, e)
         return
 
+    ranking_history = None
     for line in new_lines:
         line = line.strip()
         if not line.startswith("{"):
@@ -425,12 +427,12 @@ async def watch_score_log():
                     embed_color = discord.Color.from_rgb(*dominant_rgb)
 
             clear_names = {
-                1: "Crash",
-                2: "Effective Clear",
-                3: "Excessive Clear",
-                4: "Maxxive Clear",
-                5: "UC",
-                6: "PUC",
+                1: "Crash (×0.50)",
+                2: "Effective Clear (×1.00)",
+                3: "Excessive Clear (×1.02)",
+                4: "Maxxive Clear (×1.04)",
+                5: "UC (×1.06)",
+                6: "PUC (×1.10)",
             }
 
             embed = discord.Embed(
@@ -453,7 +455,21 @@ async def watch_score_log():
                 inline=False,
             )
             embed.set_footer(text="SDVX ∇ VolForce Tracker")
-            await user.send(embed=embed)
+            ranking_content = None
+            if clear_type != 1:
+                try:
+                    if ranking_history is None:
+                        ranking_history = await asyncio.to_thread(
+                            load_play_history,
+                            SCORE_LOG_PATH,
+                            USER_ID,
+                            USER_ID,
+                            level_db,
+                        )
+                    ranking_content = best_play_message(data, ranking_history)
+                except (OSError, ValueError, TypeError, KeyError) as error:
+                    logger.warning("Could not rank current play: %s", error)
+            await user.send(content=ranking_content, embed=embed)
             logger.info("Sent VolForce DM for mid=%d (%s) to %s", mid, song_title, user)
         except discord.Forbidden:
             logger.error(
@@ -498,7 +514,9 @@ def format_top_plays(plays: list[dict]) -> str:
 
 @bot.slash_command(
     name="top-plays",
-    description=f"Show {USERNAME}'s top 10 non-Crash plays by VolForce. Defaults to week."[:100],
+    description=f"Show {USERNAME}'s top 10 non-Crash plays by VolForce. Defaults to week."[
+        :100
+    ],
     integration_types={
         discord.IntegrationType.guild_install,
         discord.IntegrationType.user_install,
@@ -574,7 +592,8 @@ async def performance(
         str, choices=["day", "week", "month", "3 months", "all time"]
     ) = "all time",  # type: ignore
     exclude_under: discord.Option(
-        str, description="Exclude this difficulty and all lower difficulties.",
+        str,
+        description="Exclude this difficulty and all lower difficulties.",
         choices=list(DIFF_NAMES.values()),
     ) = None,  # type: ignore
 ) -> None:
@@ -582,8 +601,16 @@ async def performance(
     days = {"day": 1, "week": 7, "month": 30, "3 months": 90, "all time": 0}[period]
     try:
         plays = await asyncio.to_thread(
-            load_performance_history, SCORE_LOG_PATH, USER_ID, USER_ID, level_db, days,
-            exclude_under=next((index for index, name in DIFF_NAMES.items() if name == exclude_under), None),
+            load_performance_history,
+            SCORE_LOG_PATH,
+            USER_ID,
+            USER_ID,
+            level_db,
+            days,
+            exclude_under=next(
+                (index for index, name in DIFF_NAMES.items() if name == exclude_under),
+                None,
+            ),
         )
         if not plays:
             await ctx.respond(

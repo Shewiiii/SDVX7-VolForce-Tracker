@@ -81,6 +81,34 @@ def load_play_history(
     return sorted(plays, key=lambda play: play["timestamp"])
 
 
+def best_play_message(record: dict, history: list[dict]) -> str | None:
+    """Find the longest top-five period; equal VF shares a rank."""
+    if int(record.get("clear_type", 0)) == 1:
+        return None
+    timestamp = datetime.fromisoformat(record["received_at"].replace("Z", "+00:00"))
+    if timestamp.tzinfo is None:
+        timestamp = timestamp.replace(tzinfo=timezone.utc)
+    vf = int(record["volforce"]) / 1000
+    periods = [("all time", None), ("3 months", 90), ("month", 30), ("week", 7)]
+    ranks = [1] * len(periods)
+    for play in history:
+        if play["timestamp"] >= timestamp or play["play_vf"] <= vf:
+            continue
+        age = timestamp - play["timestamp"]
+        for index, (_, days) in enumerate(periods):
+            if ranks[index] <= 5 and (days is None or age <= timedelta(days=days)):
+                ranks[index] += 1
+    for (period, _), rank in zip(periods, ranks):
+        if rank <= 5:
+            ordinal = {1: "Best", 2: "2nd best", 3: "3rd best"}.get(rank, f"{rank}th best")
+            return (
+                f"{ordinal} play of all time !"
+                if period == "all time"
+                else f"{ordinal} play of the {period} !"
+            )
+    return None
+
+
 def load_performance_history(
     log_path: str,
     user_id: int,
@@ -97,7 +125,9 @@ def load_performance_history(
 
 
 def render_performance_graph(
-    plays: list[tuple[datetime, float]], title: str, show_hours: bool = False,
+    plays: list[tuple[datetime, float]],
+    title: str,
+    show_hours: bool = False,
     exclude_difficulty: str | None = None,
 ) -> BytesIO:
     if not plays:
