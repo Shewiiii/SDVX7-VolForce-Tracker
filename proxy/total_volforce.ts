@@ -35,11 +35,16 @@ type FieldReader = (node: ProtocolNode, name: string) => unknown;
 // including the previous-version fallback supplied by the server.
 export class TotalVolforceStore {
     private readonly filename: string;
+    private readonly historyFilename: string;
     state: TotalVolforceSnapshot | undefined;
     private pendingPlayers = new Map<string, Record<string, string | number>>();
 
     constructor(filename: string) {
         this.filename = filename;
+        this.historyFilename = path.join(
+            path.dirname(filename),
+            "volforce_history.jsonl",
+        );
         this.state = undefined;
         try {
             const state: TotalVolforceSnapshot = JSON.parse(
@@ -62,6 +67,12 @@ export class TotalVolforceStore {
             )
                 throw new Error("Invalid Total VolForce snapshot");
             this.state = state;
+            // An older cache provides one known observation, not a past timeline.
+            if (
+                !fs.existsSync(this.historyFilename) ||
+                fs.statSync(this.historyFilename).size === 0
+            )
+                this.recordHistory(state);
         } catch (caught) {
             const error = caught as NodeJS.ErrnoException;
             if (error.code !== "ENOENT")
@@ -82,9 +93,12 @@ export class TotalVolforceStore {
     ): void {
         if (
             !refid ||
-            !["game.sv7_load", "game.sv7_load_m", "game.sv7_save_m", "game.sv7_save"].includes(
-                route,
-            )
+            ![
+                "game.sv7_load",
+                "game.sv7_load_m",
+                "game.sv7_save_m",
+                "game.sv7_save",
+            ].includes(route)
         )
             return;
         if (!response || String(response["@attr"]?.status) !== "0") return;
@@ -276,10 +290,40 @@ export class TotalVolforceStore {
             state.player_updated_at = now;
         }
         this.persist(state);
+        this.recordHistory(state);
         this.pendingPlayers.clear();
         console.log(
             `Total VolForce: ${(state.total_volforce / 1000).toFixed(3)} (${values.length} saved charts)`,
         );
+    }
+
+    private recordHistory(state: TotalVolforceSnapshot): void {
+        const best = Object.values(state.chart_volforce)
+            .sort((a, b) => b - a)
+            .slice(0, 50);
+        const observation = {
+            timestamp: state.updated_at,
+            profile_id: state.profile_id,
+            total_volforce: best.reduce((sum, vf) => sum + vf, 0),
+            // VF uses integer thousandths: exceeding the 50th chart needs +1.
+            minimum_volforce: best.length === 50 ? best[49] + 1 : null,
+            top_count: best.length,
+        };
+        try {
+            fs.mkdirSync(path.dirname(this.historyFilename), {
+                recursive: true,
+            });
+            fs.appendFileSync(
+                this.historyFilename,
+                JSON.stringify(observation) + "\n",
+                "utf8",
+            );
+        } catch (caught) {
+            console.warn(
+                "Cannot record VolForce history:",
+                (caught as Error).message,
+            );
+        }
     }
 
     private persist(state: TotalVolforceSnapshot): void {

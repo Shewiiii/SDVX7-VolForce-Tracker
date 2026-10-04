@@ -2,7 +2,7 @@
 
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 
@@ -42,6 +42,7 @@ def load_total_volforce(path: str | Path) -> dict | None:
         if updated_at.tzinfo is None:
             raise ValueError("Snapshot time must include a timezone")
         return {
+            "profile_id": snapshot["profile_id"],
             "value": total / 1000,
             "updated_at": updated_at,
             "chart_count": len(values),
@@ -59,3 +60,62 @@ def load_total_volforce(path: str | Path) -> dict | None:
     except (OSError, ValueError, TypeError, KeyError, AttributeError) as error:
         logging.getLogger(__name__).warning("Cannot read Total VolForce: %s", error)
         return None
+
+
+def load_volforce_history(path: str | Path, snapshot: dict | None) -> list[dict]:
+    """Read account observations, retaining the latest cache as a known point."""
+    if snapshot is None:
+        return []
+    observations = {}
+    try:
+        with open(path, encoding="utf-8") as stream:
+            for line in stream:
+                try:
+                    record = json.loads(line)
+                    if record["profile_id"] != snapshot["profile_id"]:
+                        continue
+                    timestamp = datetime.fromisoformat(
+                        record["timestamp"].replace("Z", "+00:00")
+                    )
+                    total, minimum, count = (
+                        record["total_volforce"],
+                        record["minimum_volforce"],
+                        record["top_count"],
+                    )
+                    if (
+                        timestamp.tzinfo is None
+                        or type(total) is not int
+                        or total < 0
+                        or type(count) is not int
+                        or not 0 <= count <= 50
+                        or (count == 50 and (type(minimum) is not int or minimum < 1))
+                        or (count < 50 and minimum is not None)
+                    ):
+                        continue
+                    timestamp = timestamp.astimezone(timezone.utc)
+                    observations[timestamp] = {
+                        "timestamp": timestamp,
+                        "total_volforce": total / 1000,
+                        "minimum_volforce": minimum / 1000
+                        if minimum is not None
+                        else None,
+                    }
+                except (ValueError, TypeError, KeyError, AttributeError, OverflowError):
+                    continue
+    except FileNotFoundError:
+        pass
+    except OSError as error:
+        logging.getLogger(__name__).warning("Cannot read VolForce history: %s", error)
+    timestamp = snapshot["updated_at"].astimezone(timezone.utc)
+    worst = snapshot["worst_top_chart"]
+    observations.setdefault(
+        timestamp,
+        {
+            "timestamp": timestamp,
+            "total_volforce": snapshot["value"],
+            "minimum_volforce": round(worst["volforce"] + 0.001, 3)
+            if snapshot["top_count"] == 50
+            else None,
+        },
+    )
+    return [observations[timestamp] for timestamp in sorted(observations)]

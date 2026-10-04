@@ -22,9 +22,11 @@ from config import (
     PERFORMANCE_GRID_COLOR,
     PERFORMANCE_IMAGE_HEIGHT,
     PERFORMANCE_IMAGE_WIDTH,
+    PERFORMANCE_MINIMUM_COLOR,
     PERFORMANCE_PANEL_COLOR,
     PERFORMANCE_PANEL_DIM,
     PERFORMANCE_TEXT_COLOR,
+    PERFORMANCE_TOTAL_COLOR,
     REPO_ROOT,
 )
 
@@ -180,15 +182,37 @@ def load_performance_history(
     ]
 
 
+def _visible_observations(
+    history: list[dict], start: datetime, end: datetime
+) -> list[dict]:
+    """Carry the last known observation into the window; never backdate one."""
+    previous = None
+    visible = []
+    for observation in sorted(history, key=lambda record: record["timestamp"]):
+        timestamp = observation["timestamp"]
+        if timestamp <= start:
+            previous = observation
+        elif timestamp <= end:
+            visible.append(observation)
+    if previous is not None:
+        visible.insert(0, dict(previous, timestamp=start))
+    if visible and visible[-1]["timestamp"] < end:
+        visible.append(dict(visible[-1], timestamp=end))
+    return visible
+
+
 def render_performance_graph(
     plays: list[tuple[datetime, float]],
     title: str,
     show_hours: bool = False,
     exclude_difficulty: str | None = None,
     total_volforce: float | None = None,
+    volforce_history: list[dict] | None = None,
 ) -> BytesIO:
     if not plays:
         raise ValueError("No plays to graph")
+    plays = sorted(plays)
+    history = volforce_history or []
     size = (PERFORMANCE_IMAGE_WIDTH, PERFORMANCE_IMAGE_HEIGHT)
     if any(not isinstance(dimension, int) or dimension <= 0 for dimension in size):
         raise ValueError("Performance image width and height must be positive integers")
@@ -222,7 +246,7 @@ def render_performance_graph(
         suffix = "" if exclude_difficulty == "NOV" else " and under"
         subtitle += f", {exclude_difficulty}{suffix} excluded"
     draw.text((sx(100), sy(82)), subtitle, font=small, fill=muted)
-    left, top, right, bottom = sx(105), sy(155), sx(1410), sy(600)
+    left, top, right, bottom = sx(105), sy(155), sx(1350 if history else 1410), sy(600)
     # A translucent dark panel keeps the wallpaper visible under the plot.
     panel_box = (left, top, right + 1, bottom + 1)
     panel = image.crop(panel_box)
@@ -235,14 +259,25 @@ def render_performance_graph(
         (left, top),
     )
     start, end = plays[0][0].timestamp(), plays[-1][0].timestamp()
+    if history:
+        end = max(end, max(record["timestamp"].timestamp() for record in history))
     if end == start:
         start -= 30
         end += 30
     maximum = max(value for _, value in plays)
     minimum = min(value for _, value in plays)
     average = math.fsum(value for _, value in plays) / len(plays)
-    padding = max((maximum - minimum) * 0.12, 0.015)
-    low, high = max(0, minimum - padding), maximum + padding
+    observations = _visible_observations(
+        history,
+        datetime.fromtimestamp(start, timezone.utc),
+        datetime.fromtimestamp(end, timezone.utc),
+    )
+    thresholds = [
+        r["minimum_volforce"] for r in observations if r["minimum_volforce"] is not None
+    ]
+    chart_low, chart_high = min([minimum] + thresholds), max([maximum] + thresholds)
+    padding = max((chart_high - chart_low) * 0.12, 0.015)
+    low, high = max(0, chart_low - padding), chart_high + padding
 
     def point(timestamp, value):
         return (
@@ -264,6 +299,40 @@ def render_performance_graph(
         label_width = draw.textlength(label, font=small)
         draw.text((x - label_width / 2, bottom + sy(16)), label, font=small, fill=muted)
     draw.text((left, top - sy(30)), "VF", font=small, fill=muted)
+
+    def step_segments(records, key, mapper):
+        segments = []
+        points = []
+        previous = None
+        for record in records:
+            value = record[key]
+            timestamp = record["timestamp"]
+            if value is None:
+                if points:
+                    points.append(mapper(timestamp, previous))
+                    segments.append(points)
+                points, previous = [], None
+                continue
+            if previous is not None:
+                points.append(mapper(timestamp, previous))
+            points.append(mapper(timestamp, value))
+            previous = value
+        if points:
+            segments.append(points)
+        return segments
+
+    threshold_segments = step_segments(observations, "minimum_volforce", point)
+    if threshold_segments:
+        for points in threshold_segments:
+            if len(points) > 1:
+                draw.line(points, fill=PERFORMANCE_MINIMUM_COLOR, width=pixels(2))
+            else:
+                x, y = points[0]
+                radius = pixels(3)
+                draw.ellipse(
+                    (x - radius, y - radius, x + radius, y + radius),
+                    fill=PERFORMANCE_MINIMUM_COLOR,
+                )
 
     best = 0
     best_points = []
@@ -288,6 +357,46 @@ def render_performance_graph(
             points.append(point(timestamp, total / min(index + 1, window)))
         if len(points) > 1:
             draw.line(points, fill=color, width=pixels(width), joint="curve")
+
+    if observations:
+        totals = [record["total_volforce"] for record in observations]
+        total_padding = max((max(totals) - min(totals)) * 0.12, 0.025)
+        total_low, total_high = (
+            max(0, min(totals) - total_padding),
+            max(totals) + total_padding,
+        )
+
+        def total_point(timestamp, value):
+            x, _ = point(timestamp, low)
+            return x, bottom - (value - total_low) / (total_high - total_low) * (
+                bottom - top
+            )
+
+        for index in range(11):
+            y = top + index / 10 * (bottom - top)
+            value = total_high - index / 10 * (total_high - total_low)
+            draw.text(
+                (right + sx(16), y - sy(10)),
+                f"{value:.3f}",
+                font=small,
+                fill=muted,
+            )
+        draw.text( # Total VF
+            (right - draw.textlength("", font=small), top - sy(30)),
+            "",
+            font=small,
+            fill=muted,
+        )
+        total_points = step_segments(observations, "total_volforce", total_point)[0]
+        if len(total_points) > 1:
+            draw.line(total_points, fill=PERFORMANCE_TOTAL_COLOR, width=pixels(2))
+        else:
+            x, y = total_points[0]
+            radius = pixels(4)
+            draw.ellipse(
+                (x - radius, y - radius, x + radius, y + radius),
+                fill=PERFORMANCE_TOTAL_COLOR,
+            )
     draw.text(
         (sx(100), sy(697)),
         f"{len(plays):,} plays  |  Best {maximum:.3f}  |  Average {average:.3f}"
@@ -296,15 +405,26 @@ def render_performance_graph(
         font=regular,
         fill=muted,
     )
-    for x, label, color in (
-        (885, "Plays", dim),
-        (1045, "Avg 10", PERFORMANCE_AVG_10_COLOR),
-        (1230, "Avg 100", purple),
-    ):
+    legend = [
+        ("Plays", dim),
+        ("Best VF", PERFORMANCE_BEST_COLOR),
+        ("Avg 10", PERFORMANCE_AVG_10_COLOR),
+        ("Avg 100", purple),
+    ]
+    if threshold_segments:
+        legend.append(("Top 50", PERFORMANCE_MINIMUM_COLOR))
+    if observations:
+        legend.append(("Total VF", PERFORMANCE_TOTAL_COLOR))
+    legend_width = sum(
+        draw.textlength(label, font=small) + sx(55) for label, _ in legend
+    )
+    legend_x = right - legend_width
+    for label, color in legend:
         draw.ellipse(
-            (sx(x), sy(115), sx(x) + pixels(10), sy(115) + pixels(10)), fill=color
+            (legend_x, sy(115), legend_x + pixels(10), sy(115) + pixels(10)), fill=color
         )
-        draw.text((sx(x + 22), sy(109)), label, font=small, fill=muted)
+        draw.text((legend_x + sx(22), sy(109)), label, font=small, fill=muted)
+        legend_x += draw.textlength(label, font=small) + sx(55)
     output = BytesIO()
     image.save(output, format="PNG")
     output.seek(0)

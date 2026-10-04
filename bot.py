@@ -26,6 +26,7 @@ from config import (
     SCORE_LOG_PATH,
     TOTAL_VOLFORCE_CACHE_PATH,
     USERNAME,
+    VOLFORCE_HISTORY_PATH,
 )
 from tracker.performance import (
     best_play_message,
@@ -33,7 +34,7 @@ from tracker.performance import (
     load_play_history,
     render_performance_graph,
 )
-from tracker.total_volforce import load_total_volforce
+from tracker.total_volforce import load_total_volforce, load_volforce_history
 
 logger = logging.getLogger("sdvx_bot")
 
@@ -808,6 +809,9 @@ async def performance(
         snapshot = await asyncio.to_thread(
             load_total_volforce, TOTAL_VOLFORCE_CACHE_PATH
         )
+        volforce_history = await asyncio.to_thread(
+            load_volforce_history, VOLFORCE_HISTORY_PATH, snapshot
+        )
         image = await asyncio.to_thread(
             render_performance_graph,
             plays,
@@ -815,6 +819,7 @@ async def performance(
             show_hours=period == "day",
             exclude_difficulty=exclude_under,
             total_volforce=snapshot["value"] if snapshot else None,
+            volforce_history=volforce_history,
         )
         await ctx.respond(
             file=discord.File(image, filename="performance.png"),
