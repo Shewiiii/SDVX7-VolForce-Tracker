@@ -54,7 +54,7 @@ pip install -r requirements.txt
 ```
 
 - Create and fill a .env from the template.
-- Edit `tracker/config.py` to customize the username, paths, and performance graph.
+- Edit `config.py` to customize the username, paths, and performance graph.
 - Run `run_tracker.bat`, _then_ start the game. Create a shortcut of it for easy access !
 
 > [!NOTE]  
