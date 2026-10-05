@@ -77,9 +77,12 @@ pip install -r requirements.txt
 | h1, h5 | ± 41.67 ms  | ±37.5 ms |
 | h0, h6 | ± 133.33 ms | ±87.5 ms |
 
-Let $\forall i \in [1, 5] \cap \Z$ $h_i$ the number of notes in its respective hit window.
+Let $\forall i \in [1, 5] \cap \mathbb{Z}$ $h_i$ the number of notes in its respective hit window.
 
-Thus, $Timing = \frac{87.5(h_6-h_0) + 37.5(h_5-h_1) + 25(h_4-h_2)}{\displaystyle\sum_{i=0}^{6} h_i}$ ms.
+Thus:
+
+$$Timing = \frac{87.5(h_6-h_0) + 37.5(h_5-h_1) + 25(h_4-h_2)}{\displaystyle\sum_{i=0}^{6} h_i}$$ ms.
+
 ## Credits
 
 - The local proxy reuses the e-amusement decoding utilities from [RyuNET-core](https://github.com/Ryu7w7/RyuNET-core).
