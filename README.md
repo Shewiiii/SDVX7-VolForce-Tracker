@@ -81,7 +81,7 @@ Let $\forall i \in [1, 5] \cap \mathbb{Z}$ $h_i$ the number of notes in its resp
 
 Thus:
 
-$$Timing = \frac{87.5(h_6-h_0) + 37.5(h_5-h_1) + 25(h_4-h_2)}{\displaystyle\sum_{i=0}^{6} h_i}$$ ms.
+$Timing = \frac{87.5(h_6-h_0) + 37.5(h_5-h_1) + 25(h_4-h_2)}{\displaystyle\sum_{i=0}^{6} h_i}$ ms.
 
 ## Credits
 
