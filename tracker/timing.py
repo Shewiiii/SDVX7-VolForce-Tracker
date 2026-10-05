@@ -1,4 +1,4 @@
-"""Estimate signed hit timing from known judgment counts, never from misses."""
+"""Estimate signed timing bias from the game's coarse histogram, excluding misses."""
 
 import json
 from pathlib import Path
@@ -22,34 +22,26 @@ def judgment_counts(record: dict) -> dict:
 
 
 def timing_components(record: dict) -> tuple[float, int] | None:
-    mode = judgment_mode(record)
-    if type(mode) is not bool:
+    """Return weighted milliseconds and sample count for a midpoint estimate."""
+    histogram = record.get("timing_histogram")
+    if (
+        not isinstance(histogram, list)
+        or len(histogram) != 7
+        or any(type(value) is not int or value < 0 for value in histogram)
+    ):
         return None
     counts = judgment_counts(record)
-    keys = ("early_critical", "late_critical", "early_near", "late_near")
-    if any(key not in counts for key in keys):
+    if counts.get("near") != histogram[0] + histogram[6]:
         return None
-    early_critical, late_critical, early_near, late_near = (counts[key] for key in keys)
-    if mode:
-        if "s_critical" not in counts:
-            return None
-        if counts.get("critical") != early_critical + late_critical:
-            return None
-        center = counts["s_critical"]
-        critical_midpoint = (20.8 + 41.6) / 2
-    else:
-        if "critical" not in counts:
-            return None
-        center = counts["critical"] - early_critical - late_critical
-        if center < 0:
-            return None
-        critical_midpoint = 41.6 / 2
+    early_inner = histogram[1] + histogram[2]
+    late_inner = histogram[4] + histogram[5]
+    critical_midpoint = 41.6 / 2
     near_midpoint = (41.6 + 150.0) / 2
-    hits = center + early_critical + late_critical + early_near + late_near
+    hits = sum(histogram)
     if hits == 0:
         return None
-    weighted_ms = (late_critical - early_critical) * critical_midpoint + (
-        late_near - early_near
+    weighted_ms = (late_inner - early_inner) * critical_midpoint + (
+        histogram[6] - histogram[0]
     ) * near_midpoint
     return weighted_ms, hits
 

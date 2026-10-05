@@ -756,14 +756,14 @@ def build_profile_embed(
         ms = timing["average_ms"]
         embed.add_field(
             name="Estimated average timing",
-            value=f"`{ms:+.1f} ms` ({'Early' if ms <= 0 else 'Late'})"
+            value=f"`{ms:+.1f} ms` ({'Early' if ms < 0 else 'Late' if ms > 0 else 'Neutral'})"
             f"\nBased on {timing['hits']:,} notes, across {timing['plays']:,} plays",
             inline=False,
         )
     else:
         embed.add_field(
             name="Estimated average timing",
-            value="Saved results do not include the game's exact CRITICAL early/late counts.",
+            value="No valid, nonempty timing histograms saved yet.",
             inline=False,
         )
     embed.set_footer(text=f"{FOOTER} · RyuNET")

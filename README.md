@@ -68,6 +68,7 @@ pip install -r requirements.txt
 
 - You cannot run the game without the proxy, as long as EA Service URL is set to localhost.
 - Due to API limitations, the message is sent only after quitting the result page.
+- Timing is estimated from a 7 values histogram the game sends to the server, that does not match in-game's CRITICAL or NEAR judgements for some reasons. However I have still supposed it is the same timing window, for a lack of better approximation.
 
 ## Credits
 
