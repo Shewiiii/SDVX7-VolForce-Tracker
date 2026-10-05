@@ -68,8 +68,15 @@ pip install -r requirements.txt
 
 - You cannot run the game without the proxy, as long as EA Service URL is set to localhost.
 - Due to API limitations, the message is sent only after quitting the result page.
-- Timing is estimated from a 7 values histogram the game sends to the server, that does not match in-game's CRITICAL or NEAR judgements for some reasons. However I have still supposed it is the same timing window, for a lack of better approximation.
+- Timing is estimated from a 7 values histogram the game sends to the server, that does not match in-game's CRITICAL or NEAR judgements for some reasons.
+I have supposed the following, for the lack of a better approximation:
 
+| h0 | h1 | h2 | h3 | h4 | h5 | h6 |
+|---|---|---|---|---|---|---|
+| −95.8 ms | −20.8 ms | −20.8 ms | 0 ms | +20.8 ms | +20.8 ms | +95.8 ms |
+
+
+Here, $h_0 = -\frac{|NW| + |CW|}{2} = -h_6$ with $NW$ the near window, ±150ms and $CW$ the critical window, ±41.6ms. The other values are simply a split of $CW$, but that split is unknown. I thus combined them to a single window.
 ## Credits
 
 - The local proxy reuses the e-amusement decoding utilities from [RyuNET-core](https://github.com/Ryu7w7/RyuNET-core).
