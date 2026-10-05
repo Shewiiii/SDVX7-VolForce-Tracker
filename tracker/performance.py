@@ -229,7 +229,9 @@ def render_performance_graph(
         return max(1, round(value * scale))
 
     image = _performance_background(size)
-    draw = ImageDraw.Draw(image)
+    image_draw = ImageDraw.Draw(image)
+    graph = Image.new("RGBA", size, (0, 0, 0, 0))
+    draw = ImageDraw.Draw(graph)
 
     def font(size: int):
         return ImageFont.truetype(str(PERFORMANCE_FONT_PATH), pixels(size))
@@ -240,24 +242,13 @@ def render_performance_graph(
         PERFORMANCE_ACCENT_COLOR,
         PERFORMANCE_DIM_COLOR,
     )
-    draw.text((sx(100), sy(35)), title[:70], font=heading, fill=purple)
+    image_draw.text((sx(100), sy(35)), title[:70], font=heading, fill=purple)
     subtitle = "Chart VolForce over time"
     if exclude_difficulty:
         suffix = "" if exclude_difficulty == "NOV" else " and under"
         subtitle += f", {exclude_difficulty}{suffix} excluded"
-    draw.text((sx(100), sy(82)), subtitle, font=small, fill=muted)
+    image_draw.text((sx(100), sy(82)), subtitle, font=small, fill=muted)
     left, top, right, bottom = sx(105), sy(155), sx(1350 if history else 1410), sy(600)
-    # A translucent dark panel keeps the wallpaper visible under the plot.
-    panel_box = (left, top, right + 1, bottom + 1)
-    panel = image.crop(panel_box)
-    image.paste(
-        Image.blend(
-            panel,
-            Image.new("RGB", panel.size, PERFORMANCE_PANEL_COLOR),
-            PERFORMANCE_PANEL_DIM,
-        ),
-        (left, top),
-    )
     start, end = plays[0][0].timestamp(), plays[-1][0].timestamp()
     if history:
         end = max(end, max(record["timestamp"].timestamp() for record in history))
@@ -289,7 +280,8 @@ def render_performance_graph(
         y = top + index / 10 * (bottom - top)
         draw.line((left, y, right, y), fill=PERFORMANCE_GRID_COLOR, width=pixels(1))
         value = high - index / 10 * (high - low)
-        draw.text((left - sx(85), y - sy(10)), f"{value:.3f}", font=small, fill=muted)
+        axis_x = right + sx(16) if observations else left - sx(85)
+        draw.text((axis_x, y - sy(10)), f"{value:.3f}", font=small, fill=muted)
     for index in range(6):
         timestamp = datetime.fromtimestamp(
             start + index / 5 * (end - start), timezone.utc
@@ -376,17 +368,14 @@ def render_performance_graph(
             y = top + index / 10 * (bottom - top)
             value = total_high - index / 10 * (total_high - total_low)
             draw.text(
-                (right + sx(16), y - sy(10)),
+                (
+                    left - sx(16) - draw.textlength(f"{value:.3f}", font=small),
+                    y - sy(10),
+                ),
                 f"{value:.3f}",
                 font=small,
                 fill=muted,
             )
-        draw.text(  # Total VF
-            (right - draw.textlength("", font=small), top - sy(30)),
-            "",
-            font=small,
-            fill=muted,
-        )
         total_points = step_segments(observations, "total_volforce", total_point)[0]
         if len(total_points) > 1:
             draw.line(total_points, fill=PERFORMANCE_TOTAL_COLOR, width=pixels(2))
@@ -397,7 +386,7 @@ def render_performance_graph(
                 (x - radius, y - radius, x + radius, y + radius),
                 fill=PERFORMANCE_TOTAL_COLOR,
             )
-    draw.text(
+    image_draw.text(
         (sx(100), sy(697)),
         f"{len(plays):,} plays  |  Best {maximum:.3f}  |  Average {average:.3f}"
         + "  |  Total VolForce "
@@ -425,6 +414,28 @@ def render_performance_graph(
         )
         draw.text((legend_x + sx(22), sy(109)), label, font=small, fill=muted)
         legend_x += draw.textlength(label, font=small) + sx(55)
+
+    # Center the plot, ticks, axis heading, and legend as one group.
+    # Header and summary text stay at their original positions.
+    bounds = graph.getbbox()
+    offset_x = round((size[0] - (bounds[2] - bounds[0])) / 2) - bounds[0]
+    offset_y = round((size[1] - (bounds[3] - bounds[1])) / 2) - bounds[1]
+    panel_box = (
+        left + offset_x,
+        top + offset_y,
+        right + offset_x + 1,
+        bottom + offset_y + 1,
+    )
+    panel = image.crop(panel_box)
+    image.paste(
+        Image.blend(
+            panel,
+            Image.new("RGB", panel.size, PERFORMANCE_PANEL_COLOR),
+            PERFORMANCE_PANEL_DIM,
+        ),
+        panel_box[:2],
+    )
+    image.paste(graph, (offset_x, offset_y), graph)
     output = BytesIO()
     image.save(output, format="PNG")
     output.seek(0)
