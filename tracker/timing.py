@@ -22,7 +22,7 @@ def judgment_counts(record: dict) -> dict:
 
 
 def timing_components(record: dict) -> tuple[float, int] | None:
-    """Return weighted milliseconds and sample count for a midpoint estimate."""
+    """Estimate weighted milliseconds using midpoints."""
     histogram = record.get("timing_histogram")
     if (
         not isinstance(histogram, list)
@@ -33,16 +33,14 @@ def timing_components(record: dict) -> tuple[float, int] | None:
     counts = judgment_counts(record)
     if counts.get("near") != histogram[0] + histogram[6]:
         return None
-    early_inner = histogram[1] + histogram[2]
-    late_inner = histogram[4] + histogram[5]
-    critical_midpoint = 41.6 / 2
-    near_midpoint = (41.6 + 150.0) / 2
     hits = sum(histogram)
     if hits == 0:
         return None
-    weighted_ms = (late_inner - early_inner) * critical_midpoint + (
-        histogram[6] - histogram[0]
-    ) * near_midpoint
+    weighted_ms = (
+        (histogram[6] - histogram[0]) * 87.5
+        + (histogram[5] - histogram[1]) * 37.5
+        + (histogram[4] - histogram[2]) * 25.0
+    )
     return weighted_ms, hits
 
 

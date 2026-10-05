@@ -68,15 +68,18 @@ pip install -r requirements.txt
 
 - You cannot run the game without the proxy, as long as EA Service URL is set to localhost.
 - Due to API limitations, the message is sent only after quitting the result page.
-- Timing is estimated from a 7 values histogram the game sends to the server, that does not match in-game's CRITICAL or NEAR judgements for some reasons.
-I have supposed the following, for the lack of a better approximation:
+- Timing is estimated from the midpoints of the following 7 values histogram the game sends to the server, found in `soundvoltex.dll`. It does not match in-game's CRITICAL or NEAR judgements for some reasons:
 
-| h0 | h1 | h2 | h3 | h4 | h5 | h6 |
-|---|---|---|---|---|---|---|
-| −95.8 ms | −20.8 ms | −20.8 ms | 0 ms | +20.8 ms | +20.8 ms | +95.8 ms |
+|        | Window      | Midpoint |
+| ------ | ----------- | -------- |
+| h3     | ± 16.67 ms  | 0 ms     |
+| h2, h4 | ± 33.33 ms  | ±25 ms   |
+| h1, h5 | ± 41.67 ms  | ±37.5 ms |
+| h0, h6 | ± 133.33 ms | ±87.5 ms |
 
+Let $\forall i \in [1, 5] \cap \Z$ $h_i$ the number of notes in its respective hit window.
 
-Here, $h_0 = -\frac{|NW| + |CW|}{2} = -h_6$ with $NW$ the near window, ±150ms and $CW$ the critical window, ±41.6ms. The other values are simply a split of $CW$, but that split is unknown. I thus combined them to a single window.
+Thus, $Timing = \frac{87.5(h_6-h_0) + 37.5(h_5-h_1) + 25(h_4-h_2)}{\displaystyle\sum_{i=0}^{6} h_i}$ ms.
 ## Credits
 
 - The local proxy reuses the e-amusement decoding utilities from [RyuNET-core](https://github.com/Ryu7w7/RyuNET-core).
