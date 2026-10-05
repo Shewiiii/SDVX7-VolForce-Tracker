@@ -102,7 +102,7 @@ def load_play_history(
                 timestamp = timestamp.astimezone(timezone.utc)
                 if cutoff and timestamp < cutoff:
                     continue
-                if record.get("volforce_source") == "current_play_formula":
+                if record.get("volforce_source") == "updated":
                     vf = float(record["volforce"]) / 1000
                 else:
                     # Never plot the game's older best-play VF as a current-play value.
@@ -381,7 +381,7 @@ def render_performance_graph(
                 font=small,
                 fill=muted,
             )
-        draw.text( # Total VF
+        draw.text(  # Total VF
             (right - draw.textlength("", font=small), top - sy(30)),
             "",
             font=small,

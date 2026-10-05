@@ -34,6 +34,12 @@ from tracker.performance import (
     load_play_history,
     render_performance_graph,
 )
+from tracker.timing import (
+    judgment_counts,
+    judgment_mode,
+    load_timing_summary,
+    timing_components,
+)
 from tracker.total_volforce import load_total_volforce, load_volforce_history
 
 logger = logging.getLogger("sdvx_bot")
@@ -181,24 +187,29 @@ def find_local_appeal_card(appeal_id: int | None) -> bytes | None:
 
 def get_grade_coeff(score: int) -> tuple[float, str]:
     if score >= 9900000:
-        return 1.05, "S"
+        return 1.05, "S, ×1.05"
     if score >= 9800000:
-        return 1.02, "AAA+"
+        return 1.02, "AAA+, ×1.02"
     if score >= 9700000:
-        return 1.00, "AAA"
+        return 1.00, "AAA, ×1.00"
     if score >= 9500000:
-        return 0.97, "AA+"
+        return 0.97, "AA+, ×0.97"
     if score >= 9300000:
-        return 0.94, "AA"
+        return 0.94, "AA, ×0.94"
     if score >= 9000000:
-        return 0.91, "A+"
+        return 0.91, "A+, ×0.91"
     if score >= 8700000:
-        return 0.88, "A"
+        return 0.88, "A, ×0.88"
     if score >= 7500000:
-        return 0.85, "B"
+        return 0.85, "B, ×0.85"
     if score >= 6500000:
-        return 0.82, "C"
-    return 0.80, "D"
+        return 0.82, "C, ×0.82"
+    return 0.80, "D, ×0.80"
+
+
+def get_grade_name(score: int) -> str:
+    """Return grade name without the multiplier."""
+    return get_grade_coeff(score)[1].partition(",")[0].strip()
 
 
 def parse_music_db() -> tuple[dict[int, str], dict[int, dict[int, float]]]:
@@ -281,12 +292,12 @@ def compute_vf(level: float, score: int, clear_coeff: float) -> float:
     return math.floor(raw) * 0.001
 
 
-# BOT LIFECYCLE & DISPATCH
+# BOT
 
 
 def format_score_breakdown(data: dict) -> str:
-    """Display only transmitted counters; missing counts are not zero."""
-    counts = data.get("score_breakdown") or {}
+    """Display recovered screen totals and only verified early/late counters."""
+    counts = judgment_counts(data)
 
     def count(key: str) -> str:
         value = counts.get(key)
@@ -296,15 +307,28 @@ def format_score_breakdown(data: dict) -> str:
 
     if not counts:
         return "Judgment counts were not provided in this result."
-    lines = [
-        f"- {label}: {count(key)}"
-        for label, key in (
-            ("S-CRITICAL", "s_critical"),
-            ("CRITICAL", "critical"),
-            ("NEAR", "near"),
-            ("ERROR", "error"),
-        )
-    ]
+    lines = []
+    mode = judgment_mode(data)
+    if mode is not False and "s_critical" in counts:
+        lines.append(f"- S-CRITICAL: {count('s_critical')}")
+    for label, key in (("CRITICAL", "critical"), ("NEAR", "near"), ("ERROR", "error")):
+        early, late = f"early_{key}", f"late_{key}"
+        if early in counts or late in counts:
+            value = f"{count(early)}  |  {count(late)}"
+            if key == "critical":
+                value = f"{count(key)} ({value})"
+        else:
+            value = count(key)
+            if key == "critical" and key not in counts:
+                raw = data.get("raw_judgments")
+                total = raw.get("critical_including_s_critical") if isinstance(raw, dict) else None
+                if type(total) is int and total >= 0:
+                    label = "CRITICAL (including S-CRITICAL)"
+                    value = f"{total:,}"
+        lines.append(f"- {label}: {value}")
+    components = timing_components(data)
+    if components is not None:
+        lines.append(f"\nTiming: `{components[0] / components[1]:+.1f} ms`")
     return "\n".join(lines)
 
 
@@ -403,7 +427,7 @@ async def watch_score_log():
             continue
         try:
             data = json.loads(line)
-            # New proxy records contain VF calculated for this specific play.
+            # New proxy records contain VF calculated for this specific play
             if "volforce" not in data:
                 logger.info("Ignoring score without calculated VolForce: %s", data)
                 continue
@@ -416,7 +440,7 @@ async def watch_score_log():
             song_title = title_db.get(mid, f"Music #{mid}")
             diff_name = DIFF_NAMES.get(diff_idx, "UNK")
             level = level_db.get(mid, {}).get(diff_idx, 0.0)
-            _, grade_name = get_grade_coeff(score)
+            _, grade = get_grade_coeff(score)
 
             # Determine cover image & accent color
             embed_color = discord.Color(0xE0218A)
@@ -428,9 +452,9 @@ async def watch_score_log():
 
             clear_names = {
                 1: "Crash (×0.50)",
-                2: "Effective Clear (×1.00)",
-                3: "Excessive Clear (×1.02)",
-                4: "Maxxive Clear (×1.04)",
+                2: "Effective (×1.00)",
+                3: "Excessive (×1.02)",
+                4: "Maxxive (×1.04)",
                 5: "UC (×1.06)",
                 6: "PUC (×1.10)",
             }
@@ -439,7 +463,7 @@ async def watch_score_log():
                 title=f"{song_title}",
                 description=(
                     f"**Difficulty:** {diff_name} ({level:.1f})\n"
-                    f"**Score:** {score:,} ({grade_name})\n"
+                    f"**Score:** {score:,} ({grade})\n"
                     f"**Clear:** {clear_names.get(clear_type, 'Unknown')}\n"
                     f"**VolForce:** `{volforce / 1000:.3f}`"
                 ),
@@ -454,7 +478,7 @@ async def watch_score_log():
                 )
 
             embed.add_field(
-                name="Score breakdown",
+                name="Judgements (Early  |  Late)",
                 value=format_score_breakdown(data),
                 inline=False,
             )
@@ -495,7 +519,7 @@ async def watch_score_log_error(error):
     logger.error("watch_score_log task encountered an error: %s", error)
 
 
-# MISC COMMANDS
+# STATS COMMANDS
 
 
 def format_top_plays(plays: list[dict]) -> str:
@@ -585,7 +609,9 @@ async def top_plays(
         await ctx.respond("Could not read top-play history.")
 
 
-def build_profile_embed(snapshot: dict | None, history: list[dict]) -> discord.Embed:
+def build_profile_embed(
+    snapshot: dict | None, history: list[dict], timing: dict | None = None
+) -> discord.Embed:
     player = snapshot["player"] if snapshot else {}
     name = discord.utils.escape_markdown(str(player.get("name") or USERNAME))[:100]
     embed = discord.Embed(title=f"{name}'s Profile", color=discord.Color(0xCBA6F7))
@@ -666,7 +692,7 @@ def build_profile_embed(snapshot: dict | None, history: list[dict]) -> discord.E
                 inline=False,
             )
             grades = Counter(
-                get_grade_coeff(record["score"])[1] for record in records.values()
+                get_grade_name(record["score"]) for record in records.values()
             )
             embed.add_field(
                 name="Grades",
@@ -689,14 +715,14 @@ def build_profile_embed(snapshot: dict | None, history: list[dict]) -> discord.E
                 inline=False,
             )
         updated = int(snapshot["updated_at"].timestamp())
-        captured = f"Charts: <t:{updated}:f> (<t:{updated}:R>)"
+        captured = f"Charts: <t:{updated}:R>"
         if snapshot["player_updated_at"]:
             try:
                 timestamp = datetime.fromisoformat(
                     snapshot["player_updated_at"].replace("Z", "+00:00")
                 )
                 if timestamp.tzinfo is not None:
-                    captured += f"\nAccount details: <t:{int(timestamp.timestamp())}:f>"
+                    captured += f"\nAccount details: <t:{int(timestamp.timestamp())}:R>"
             except (ValueError, TypeError, AttributeError):
                 pass
         embed.add_field(name="Last captured", value=captured, inline=False)
@@ -726,6 +752,20 @@ def build_profile_embed(snapshot: dict | None, history: list[dict]) -> discord.E
             value="No local history available.",
             inline=False,
         )
+    if timing is not None:
+        ms = timing["average_ms"]
+        embed.add_field(
+            name="Estimated average timing",
+            value=f"`{ms:+.1f} ms` ({'Early' if ms <= 0 else 'Late'})"
+            f"\nBased on {timing['hits']:,} notes, across {timing['plays']:,} plays",
+            inline=False,
+        )
+    else:
+        embed.add_field(
+            name="Estimated average timing",
+            value="Saved results do not include the game's exact CRITICAL early/late counts.",
+            inline=False,
+        )
     embed.set_footer(text=f"{FOOTER} · RyuNET")
     return embed
 
@@ -748,7 +788,12 @@ async def profile(ctx: discord.ApplicationContext) -> None:
     except (OSError, ValueError) as error:
         logger.warning("Could not load profile's local history: %s", error)
         history = []
-    embed = build_profile_embed(snapshot, history)
+    try:
+        timing = await asyncio.to_thread(load_timing_summary, SCORE_LOG_PATH, USER_ID)
+    except (OSError, ValueError) as error:
+        logger.warning("Could not load timing history: %s", error)
+        timing = None
+    embed = build_profile_embed(snapshot, history, timing)
     appeal_id = snapshot["player"].get("appeal_id") if snapshot else None
     card_bytes = await asyncio.to_thread(find_local_appeal_card, appeal_id)
     attachment = {}

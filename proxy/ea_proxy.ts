@@ -28,13 +28,7 @@ const { KonmaiEncrypt } = require(
 const LzKN = require(path.join(ryuRoot, "src/utils/LzKN")).default;
 const KBin = require(path.join(ryuRoot, "src/utils/KBinJSON"));
 
-const musicDbPath = path.join(
-    repoRoot,
-    "..",
-    "data",
-    "others",
-    "music_db.xml",
-);
+const musicDbPath = path.join(repoRoot, "..", "data", "others", "music_db.xml");
 const difficultyTags = [
     ["novice"],
     ["advanced"],
@@ -240,8 +234,8 @@ function captureJudgments(track) {
                 .replace(/[^a-z0-9]/g, "");
             const aliases = {
                 scritical: "s_critical",
-                just: "s_critical",
-                critical: "critical",
+                just: "btfx_s_critical",
+                critical: "critical_including_s_critical",
                 near: "near",
                 error: "error",
                 early: "early",
@@ -282,7 +276,38 @@ function captureJudgments(track) {
         }
     };
     visit(track);
-    return { counts, raw };
+    const histogram = raw.judge;
+    if (
+        Array.isArray(histogram) &&
+        histogram.length === 7 &&
+        histogram.every((count) => Number.isSafeInteger(count) && count >= 0) &&
+        counts.near === histogram[0] + histogram[6]
+    ) {
+        // This layout omits ERROR: its outer bins match the scalar NEAR total.
+        counts.early_near ??= histogram[0];
+        counts.late_near ??= histogram[6];
+        // The inner timing bins are not the result screen's CRITICAL sides.
+    }
+    return { counts, raw, histogram };
+}
+
+function recoverScoreBreakdown(counts, sCriticalEnabled, exscore) {
+    const total = counts.critical_including_s_critical;
+    if (total === undefined) return;
+    if (sCriticalEnabled === false) {
+        counts.critical = total;
+        return;
+    }
+    if (sCriticalEnabled !== true) return;
+    const just = counts.btfx_s_critical;
+    const near = counts.near;
+    if (![just, near, exscore].every((value) => Number.isSafeInteger(value) && value >= 0))
+        return;
+    // EX = 2*total + 3*SC_btfx + 2*C_btfx + 2*NEAR.
+    const remainder = exscore - 2 * total - 3 * just - 2 * near;
+    if (remainder < 0 || remainder % 2 || just + remainder / 2 > total) return;
+    counts.critical = remainder / 2;
+    counts.s_critical = total - counts.critical;
 }
 
 function writeResults(decoded) {
@@ -315,6 +340,37 @@ function writeResults(decoded) {
         }
 
         const judgments = captureJudgments(track);
+        const resultOptions = Object.fromEntries(
+            [
+                "mode",
+                "start_option",
+                "gauge_type",
+                "notes_option",
+                "etc",
+                "s_critical_enabled",
+                "scritical_enabled",
+                "critical_mode",
+            ]
+                .map((key) => [key, field(track, key)])
+                .filter(([, value]) => value !== undefined && value !== null),
+        );
+        const explicitMode =
+            resultOptions.s_critical_enabled ?? resultOptions.scritical_enabled;
+        let sCriticalEnabled = [true, 1, "1", "true"].includes(explicitMode)
+            ? true
+            : [false, 0, "0", "false"].includes(explicitMode)
+              ? false
+              : undefined;
+        if (
+            sCriticalEnabled === undefined &&
+            typeof resultOptions.etc === "string"
+        ) {
+            const match = resultOptions.etc.match(
+                /(?:^|[,;]\s*)scr\s*:\s*([01])(?=\s*[,;]|$)/,
+            );
+            if (match) sCriticalEnabled = match[1] === "1";
+        }
+        recoverScoreBreakdown(judgments.counts, sCriticalEnabled, number(field(track, "exscore")));
         if (!Object.keys(judgments.counts).length) {
             console.warn(
                 "No recognized judgment counters; judgment field names:",
@@ -329,10 +385,25 @@ function writeResults(decoded) {
             score_grade: number(field(track, "score_grade")) || 0,
             exscore: number(field(track, "exscore")) || 0,
             volforce,
-            volforce_source: "current_play_formula",
+            volforce_source: "updated",
             level,
-            score_breakdown: judgments.counts,
-            judgment_fields: judgments.raw,
+            judgments: Object.fromEntries(
+                Object.entries(judgments.counts).filter(
+                    ([key]) => !["btfx_s_critical", "critical_including_s_critical"].includes(key),
+                ),
+            ),
+            raw_judgments: Object.fromEntries(
+                Object.entries(judgments.raw)
+                    .filter(([key]) => key !== "judge")
+                    .map(([key, value]) => [
+                        key === "just" ? "btfx_s_critical"
+                            : key === "critical" ? "critical_including_s_critical" : key,
+                        value,
+                    ]),
+            ),
+            timing_histogram: judgments.histogram,
+            s_critical_enabled: sCriticalEnabled ?? null,
+            result_options: resultOptions,
             received_at: new Date().toISOString(),
         };
         fs.appendFileSync(scoreLogPath, JSON.stringify(record) + "\n", "utf8");
