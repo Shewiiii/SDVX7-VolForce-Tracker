@@ -24,7 +24,7 @@ The script observes the game's e-amusement result requests through a local proxy
 
 - Clone the repo and move it to sdvx' root folder
 - Install Node.js.
-- Clone Ryu's [RyuNET-core](https://github.com/Ryu7w7/RyuNET-core) repo, then move `RyuNET-core-master` next to `ea_proxy.ts`. Your game's folder should look like this:
+- Clone Ryu's [RyuNET-core](https://github.com/Ryu7w7/RyuNET-core) repo, then move `RyuNET-core-master` next to `bot.py`. Your game's folder should look like this:
 
 ```text
 SOUND VOLTEX NABLA/
