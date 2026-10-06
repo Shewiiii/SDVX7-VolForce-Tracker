@@ -6,6 +6,7 @@ const path = require("path");
 const querystring = require("querystring");
 const fs = require("fs");
 const { TotalVolforceStore } = require("./total_volforce");
+const { ChartLevelStore } = require("./music_db");
 const repoRoot = path.resolve(__dirname, "..");
 const totalVolforce = new TotalVolforceStore(
     path.join(repoRoot, "cache", "total_volforce.json"),
@@ -27,51 +28,29 @@ const { KonmaiEncrypt } = require(
 );
 const LzKN = require(path.join(ryuRoot, "src/utils/LzKN")).default;
 const KBin = require(path.join(ryuRoot, "src/utils/KBinJSON"));
+const xmlParser = require(
+    path.join(ryuRoot, "node_modules", "fast-xml-parser"),
+);
 
 const musicDbPath = path.join(repoRoot, "..", "data", "others", "music_db.xml");
-const difficultyTags = [
-    ["novice"],
-    ["advanced"],
-    ["exhaust"],
-    ["infinite", "gravity", "heaven", "vivid", "exceed", "nabla"],
-    ["maximum"],
-    ["ultimate"],
-];
-
-function loadChartLevels() {
-    const levels = new Map();
-    try {
-        const raw = fs.readFileSync(musicDbPath);
-        const db = KBin.xmlToData(raw, KBin.detectXMLEncoding(raw));
-        const entries = db.mdb?.music || [];
-        for (const music of Array.isArray(entries) ? entries : [entries]) {
-            const id = number(field(music, "id"));
-            if (id === undefined) continue;
-            difficultyTags.forEach((tags, index) => {
-                const chart = tags
-                    .map((tag) => music.difficulty?.[tag])
-                    .find(Boolean);
-                const rawLevel = number(field(chart, "difnum"));
-                if (rawLevel === undefined || rawLevel <= 0) return;
-                levels.set(
-                    `${id}:${index}`,
-                    rawLevel > 20 ? rawLevel / 10 : rawLevel,
-                );
-            });
-        }
-        console.log(
-            `Loaded ${levels.size} chart levels for current-play VolForce`,
-        );
-    } catch (error) {
-        console.error(
-            `Cannot load chart levels from ${musicDbPath}:`,
-            error.message,
-        );
-    }
-    return levels;
+const customChartsRoot = process.env.TRACKER_CUSTOM_CHARTS_ROOT;
+const musicDbPaths = [musicDbPath];
+if (customChartsRoot !== "disabled") {
+    musicDbPaths.push(
+        path.join(
+            customChartsRoot ||
+                path.join(repoRoot, "..", "data_mods", "ryunet_custom"),
+            "others",
+            "music_db.merged.xml",
+        ),
+    );
 }
-
-const chartLevels = loadChartLevels();
+const chartLevelStore = new ChartLevelStore(musicDbPaths, (raw) => {
+    const validation = xmlParser.validate(raw.toString("latin1"));
+    if (validation !== true) throw new Error(validation.err.msg);
+    return KBin.xmlToData(raw, KBin.detectXMLEncoding(raw));
+});
+chartLevelStore.refresh();
 
 function calculatePlayVolforce(level, score, clearType) {
     const grades = [
@@ -301,7 +280,11 @@ function recoverScoreBreakdown(counts, sCriticalEnabled, exscore) {
     if (sCriticalEnabled !== true) return;
     const just = counts.btfx_s_critical;
     const near = counts.near;
-    if (![just, near, exscore].every((value) => Number.isSafeInteger(value) && value >= 0))
+    if (
+        ![just, near, exscore].every(
+            (value) => Number.isSafeInteger(value) && value >= 0,
+        )
+    )
         return;
     // EX = 2*total + 3*SC_btfx + 2*C_btfx + 2*NEAR.
     const remainder = exscore - 2 * total - 3 * just - 2 * near;
@@ -312,6 +295,7 @@ function recoverScoreBreakdown(counts, sCriticalEnabled, exscore) {
 
 function writeResults(decoded) {
     if (!decoded.route || !decoded.route.endsWith("_save_m")) return;
+    const chartLevels = chartLevelStore.refresh();
 
     for (const track of findTracks(decoded.data)) {
         const musicId = number(field(track, "music_id"));
@@ -370,7 +354,11 @@ function writeResults(decoded) {
             );
             if (match) sCriticalEnabled = match[1] === "1";
         }
-        recoverScoreBreakdown(judgments.counts, sCriticalEnabled, number(field(track, "exscore")));
+        recoverScoreBreakdown(
+            judgments.counts,
+            sCriticalEnabled,
+            number(field(track, "exscore")),
+        );
         if (!Object.keys(judgments.counts).length) {
             console.warn(
                 "No recognized judgment counters; judgment field names:",
@@ -389,15 +377,22 @@ function writeResults(decoded) {
             level,
             judgments: Object.fromEntries(
                 Object.entries(judgments.counts).filter(
-                    ([key]) => !["btfx_s_critical", "critical_including_s_critical"].includes(key),
+                    ([key]) =>
+                        ![
+                            "btfx_s_critical",
+                            "critical_including_s_critical",
+                        ].includes(key),
                 ),
             ),
             raw_judgments: Object.fromEntries(
                 Object.entries(judgments.raw)
                     .filter(([key]) => key !== "judge")
                     .map(([key, value]) => [
-                        key === "just" ? "btfx_s_critical"
-                            : key === "critical" ? "critical_including_s_critical" : key,
+                        key === "just"
+                            ? "btfx_s_critical"
+                            : key === "critical"
+                              ? "critical_including_s_critical"
+                              : key,
                         value,
                     ]),
             ),

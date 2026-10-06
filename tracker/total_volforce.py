@@ -1,5 +1,3 @@
-"""Read the complete chart snapshot captured from the player's login response."""
-
 import json
 import logging
 from datetime import datetime, timezone

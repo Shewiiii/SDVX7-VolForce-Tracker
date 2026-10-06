@@ -9,6 +9,7 @@ SCORE_LOG_PATH = str(REPO_ROOT / "score_log.txt")
 TOTAL_VOLFORCE_CACHE_PATH = REPO_ROOT / "cache" / "total_volforce.json"
 VOLFORCE_HISTORY_PATH = REPO_ROOT / "cache" / "volforce_history.jsonl"
 MUSIC_DB_PATH = str(GAME_ROOT / "data" / "others" / "music_db.xml")
+CUSTOM_CHARTS_ROOT = GAME_ROOT / "data_mods" / "ryunet_custom"  # Set to None to disable
 PULLING_RATE = 1
 
 USERNAME = "Shewi"

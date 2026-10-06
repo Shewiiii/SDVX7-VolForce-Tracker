@@ -1,5 +1,3 @@
-"""Estimate signed timing bias from the game's coarse histogram, excluding misses."""
-
 import json
 from pathlib import Path
 
@@ -10,7 +8,7 @@ def judgment_mode(record: dict) -> bool | None:
 
 
 def judgment_counts(record: dict) -> dict:
-    """Read normalized screen counts; raw counters and bins are kept separately."""
+    """Read normalized screen counts, raw counters and bins are kept separately."""
     raw_counts = record.get("judgments")
     if not isinstance(raw_counts, dict):
         return {}

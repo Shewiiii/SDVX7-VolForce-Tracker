@@ -1,5 +1,3 @@
-"""Read local play history and render a Discord-friendly performance chart."""
-
 import json
 import logging
 import math

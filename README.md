@@ -5,6 +5,8 @@ They are sent in Discord DMs via a local bot.
 
 The script observes the game's e-amusement result requests through a local proxy and forwards them unchanged to Ryu's server.
 
+[Custom charts](https://x.ryu7w7.xyz/plugin/sdvx@asphyxia/custom%20charts%20setup) are supported.
+
 <p>
 	<img src="assets/img/rasis.jpg" alt="Rasis sending play results" width="400">
 </p>
