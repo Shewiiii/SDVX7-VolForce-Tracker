@@ -236,7 +236,7 @@ def build_profile_embed(
             value=f"No valid S-CRITICAL timing data saved yet.\n{timing_note}",
             inline=False,
         )
-    embed.set_footer(text=f"{FOOTER} · RyuNET")
+    embed.set_footer(text=f"{FOOTER}  ·  RyuNET")
     return embed
 
 

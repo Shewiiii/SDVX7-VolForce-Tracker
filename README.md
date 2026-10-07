@@ -17,6 +17,9 @@ The script observes the game's e-amusement result requests through a local proxy
 	<img src="assets/img/top-plays.jpg" alt="Top Plays embed" width="700">
 </p>
 <p>
+	<img src="assets/img/leaderboard.jpg" alt="Local leaderboard of a chart" width="700">
+</p>
+<p>
 	<img src="assets/img/performance.png" alt="VolForce Performance History embed" width="700">
 </p>
 

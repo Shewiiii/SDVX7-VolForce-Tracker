@@ -27,8 +27,8 @@ def format_top_plays(plays: list[dict], music: MusicCatalog) -> str:
         )[:160]
         level = music.levels.get(mid, {}).get(difficulty, 0.0)
         lines.append(
-            f"{rank}. {artist} - {title}  |  {DIFF_NAMES.get(difficulty, 'UNK')} "
-            f"({level:.1f})  |  `{play['play_vf']:.3f}`"
+            f"**{rank}.** {artist} - {title} · {DIFF_NAMES.get(difficulty, 'UNK')} "
+            f"({level:.1f}) · `{play['play_vf']:.3f}`"
         )
     return "\n".join(lines)
 

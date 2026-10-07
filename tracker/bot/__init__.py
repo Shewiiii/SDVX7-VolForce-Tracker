@@ -4,6 +4,7 @@ from .state import BotState
 
 
 def register_commands(client: discord.Bot, state: BotState) -> None:
+    from .leaderboard import Leaderboard
     from .performance import Performance
     from .profile import Profile
     from .top_plays import TopPlays
@@ -11,3 +12,4 @@ def register_commands(client: discord.Bot, state: BotState) -> None:
     client.add_cog(TopPlays(state))
     client.add_cog(Profile(state))
     client.add_cog(Performance(state))
+    client.add_cog(Leaderboard(state))

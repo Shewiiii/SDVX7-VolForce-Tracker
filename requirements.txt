@@ -2,3 +2,4 @@ py-cord
 python-dotenv
 pillow
 ifstools>=3.0,<4.0
+pykakasi>=2.3,<3

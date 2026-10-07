@@ -17,7 +17,7 @@ DIFFICULTY_TAGS = (
 JACKET_INDICES = ((1,), (2, 1), (3, 2, 1), (4, 3, 1), (5, 4, 3, 1), (5, 4, 3, 1))
 
 
-def _read_database(path: Path) -> tuple[dict, dict, dict]:
+def _read_database(path: Path) -> tuple[dict, dict, dict, dict, dict]:
     raw = path.read_bytes()
     declaration = re.search(rb'encoding=[\'"]([^\'"]+)', raw[:200], re.IGNORECASE)
     encoding = declaration[1].decode("ascii").lower() if declaration else "utf-8-sig"
@@ -28,6 +28,7 @@ def _read_database(path: Path) -> tuple[dict, dict, dict]:
     if root.tag != "mdb":
         raise ValueError("Expected an mdb music database")
     titles, artists, levels = {}, {}, {}
+    title_readings, artist_readings = {}, {}
     for music in root.findall("music"):
         try:
             mid = int(music.get("id", "0"))
@@ -39,6 +40,12 @@ def _read_database(path: Path) -> tuple[dict, dict, dict]:
                 titles[mid] = title
             if artist:
                 artists[mid] = artist
+            title_reading = music.findtext("info/title_yomigana", "").strip()
+            artist_reading = music.findtext("info/artist_yomigana", "").strip()
+            if title_reading:
+                title_readings[mid] = title_reading
+            if artist_reading:
+                artist_readings[mid] = artist_reading
             charts = {}
             for index, tags in enumerate(DIFFICULTY_TAGS):
                 for tag in tags:
@@ -52,7 +59,7 @@ def _read_database(path: Path) -> tuple[dict, dict, dict]:
             levels[mid] = charts
         except (ValueError, TypeError, AttributeError) as error:
             logger.debug("Skipping invalid music entry in %s: %s", path, error)
-    return titles, artists, levels
+    return titles, artists, levels, title_readings, artist_readings
 
 
 class MusicCatalog:
@@ -65,6 +72,7 @@ class MusicCatalog:
         self._signatures = {}
         self._sources = {}
         self.titles, self.artists, self.levels = {}, {}, {}
+        self.title_readings, self.artist_readings = {}, {}
 
     def refresh(self) -> None:
         """Reload changed files: retain a last good source during a failed sync."""
@@ -100,15 +108,22 @@ class MusicCatalog:
             changed = True
         if changed:
             titles, artists, levels = {}, {}, {}
+            title_readings, artist_readings = {}, {}
             for path in self.paths:
-                source_titles, source_artists, source_levels = self._sources.get(
-                    path, ({}, {}, {})
+                (
+                    source_titles, source_artists, source_levels,
+                    source_title_readings, source_artist_readings,
+                ) = self._sources.get(
+                    path, ({}, {}, {}, {}, {})
                 )
                 titles.update(source_titles)
                 artists.update(source_artists)
+                title_readings.update(source_title_readings)
+                artist_readings.update(source_artist_readings)
                 for mid, charts in source_levels.items():
                     levels.setdefault(mid, {}).update(charts)
             self.titles, self.artists, self.levels = titles, artists, levels
+            self.title_readings, self.artist_readings = title_readings, artist_readings
             logger.info(
                 "Loaded %d songs from original/custom music databases", len(levels)
             )
