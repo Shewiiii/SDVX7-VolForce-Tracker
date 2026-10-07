@@ -1,5 +1,3 @@
-"""Start the Discord bot and watch for new score results."""
-
 import asyncio
 import json
 import logging
