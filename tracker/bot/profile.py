@@ -27,6 +27,7 @@ from tracker.total_volforce import load_total_volforce
 from .scores import get_grade_name
 from .state import BotState
 from .views import CloseView
+from .volforce_icons import find_volforce_class_icon, get_volforce_class
 
 logger = logging.getLogger("sdvx_bot")
 
@@ -73,7 +74,8 @@ def build_profile_embed(
 ) -> discord.Embed:
     player = snapshot["player"] if snapshot else {}
     name = discord.utils.escape_markdown(str(player.get("name") or USERNAME))[:100]
-    embed = discord.Embed(title=f"{name}'s Profile", color=discord.Color(0xCBA6F7))
+    embed = discord.Embed(title="", color=discord.Color(0xCBA6F7))
+    embed.set_author(name=f"{name}'s Profile")
     code = player.get("sdvx_id") or player.get("code")
     if code:
         embed.add_field(name="SDVX ID", value=discord.utils.escape_markdown(str(code)))
@@ -112,7 +114,11 @@ def build_profile_embed(
         return f"`{chart['volforce']:.3f}`\n{title} · {label}"
 
     if snapshot:
-        embed.add_field(name="Total VolForce", value=f"`{snapshot['value']:.3f}`")
+        volforce_text = f"`{snapshot['value']:.3f}`"
+        volforce_class = get_volforce_class(snapshot["value"])
+        if volforce_class:
+            volforce_text += f", {volforce_class[1]}"
+        embed.add_field(name="Total VolForce", value=volforce_text)
         embed.add_field(
             name="Saved charts",
             value=f"{snapshot['chart_count']:,} charts across {snapshot['song_count']:,} songs",
@@ -211,18 +217,23 @@ def build_profile_embed(
             value="No local history available.",
             inline=False,
         )
+    timing_note = (
+        "[Non S-CRITICAL scores are not included]"
+        "(https://github.com/Shewiiii/SDVX7-VolForce-Tracker#limitations)"
+    )
     if timing is not None:
         ms = timing["average_ms"]
         embed.add_field(
-            name="Estimated average timing",
+            name="Timing",
             value=f"`{ms:+.1f} ms` ({'Early' if ms < 0 else 'Late' if ms > 0 else 'Neutral'})"
-            f"\nBased on {timing['hits']:,} notes, across {timing['plays']:,} plays",
+            f"\nBased on {timing['hits']:,} notes, across {timing['plays']:,} plays"
+            f"\n{timing_note}",
             inline=False,
         )
     else:
         embed.add_field(
-            name="Estimated average timing",
-            value="No valid, nonempty timing histograms saved yet.",
+            name="Timing",
+            value=f"No valid S-CRITICAL timing data saved yet.\n{timing_note}",
             inline=False,
         )
     embed.set_footer(text=f"{FOOTER} · RyuNET")
@@ -271,12 +282,23 @@ class Profile(discord.Cog):
         embed = build_profile_embed(snapshot, history, timing, music=music)
         appeal_id = snapshot["player"].get("appeal_id") if snapshot else None
         card_bytes = await asyncio.to_thread(find_local_appeal_card, appeal_id)
+        icon_bytes = await asyncio.to_thread(
+            find_volforce_class_icon, snapshot["value"] if snapshot else None
+        )
+        files = []
         attachment = {}
         if card_bytes:
             embed.set_thumbnail(url="attachment://appeal_card.png")
-            attachment["file"] = discord.File(
-                BytesIO(card_bytes), filename="appeal_card.png"
+            files.append(discord.File(BytesIO(card_bytes), filename="appeal_card.png"))
+        if icon_bytes:
+            embed.set_author(
+                name=embed.author.name, icon_url="attachment://volforce_class.png"
             )
+            files.append(
+                discord.File(BytesIO(icon_bytes), filename="volforce_class.png")
+            )
+        if files:
+            attachment["files"] = files
         await ctx.respond(
             embed=embed,
             allowed_mentions=discord.AllowedMentions.none(),

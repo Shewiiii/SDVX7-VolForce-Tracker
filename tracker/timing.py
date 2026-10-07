@@ -19,7 +19,9 @@ def judgment_counts(record: dict) -> dict:
     }
 
 
-def timing_components(record: dict) -> tuple[float, int] | None:
+def timing_components(
+    record: dict, *, require_btfx: bool = False
+) -> tuple[float, int] | None:
     """Estimate weighted milliseconds, correcting center inflation when possible."""
     histogram = record.get("timing_histogram")
     if (
@@ -32,6 +34,7 @@ def timing_components(record: dict) -> tuple[float, int] | None:
     if counts.get("near") != histogram[0] + histogram[6]:
         return None
     hits = sum(histogram)
+    has_btfx_timing = False
 
     raw = record.get("raw_judgments")
     if judgment_mode(record) is True and isinstance(raw, dict):
@@ -52,8 +55,9 @@ def timing_components(record: dict) -> tuple[float, int] | None:
             center_hits = just + critical - side_hits
             if 0 <= center_hits <= histogram[3]:
                 hits = hits - histogram[3] + center_hits
+                has_btfx_timing = True
 
-    if hits == 0:
+    if hits == 0 or (require_btfx and not has_btfx_timing):
         return None
     weighted_ms = (
         (histogram[6] - histogram[0]) * 87.5
@@ -64,9 +68,10 @@ def timing_components(record: dict) -> tuple[float, int] | None:
 
 
 def summarize_timing(records: list[dict]) -> dict | None:
+    """Average only S-CRITICAL-enabled plays with usable BT/FX timing data."""
     weighted_ms, hits, plays = 0.0, 0, 0
     for record in records:
-        components = timing_components(record)
+        components = timing_components(record, require_btfx=True)
         if components is not None:
             weighted_ms += components[0]
             hits += components[1]
@@ -77,7 +82,7 @@ def summarize_timing(records: list[dict]) -> dict | None:
 
 
 def load_timing_summary(path: str | Path, user_id: int) -> dict | None:
-    """Include timed hits from every captured play, including TRACK CRASH."""
+    """Load eligible S-CRITICAL timing for this user, including TRACK CRASH."""
     records = []
     with open(path, encoding="utf-8") as stream:
         for line in stream:
