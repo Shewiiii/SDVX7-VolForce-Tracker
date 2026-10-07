@@ -38,41 +38,48 @@ def compute_vf(level: float, score: int, clear_coeff: float) -> float:
 
 
 def format_score_breakdown(data: dict) -> str:
-    """Display recovered screen totals and only verified early/late counters."""
+    """Display recovered in-game totals and NEAR early/late counter."""
     counts = judgment_counts(data)
 
     def count(key: str) -> str:
         value = counts.get(key)
-        if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
-            return f"{value:,}"
-        return "-"
+        return f"{value:,}" if value is not None else "-"
 
     if not counts:
         return "Judgment counts were not provided in this result."
     lines = []
     mode = judgment_mode(data)
+
     if mode is not False and "s_critical" in counts:
         lines.append(f"- S-CRITICAL: {count('s_critical')}")
-    for label, key in (("CRITICAL", "critical"), ("NEAR", "near"), ("ERROR", "error")):
-        early, late = f"early_{key}", f"late_{key}"
-        if early in counts or late in counts:
-            value = f"{count(early)}  |  {count(late)}"
-            if key == "critical":
-                value = f"{count(key)} ({value})"
-        else:
-            value = count(key)
-            if key == "critical" and key not in counts:
-                raw = data.get("raw_judgments")
-                total = (
-                    raw.get("critical_including_s_critical")
-                    if isinstance(raw, dict)
-                    else None
-                )
-                if type(total) is int and total >= 0:
-                    label = "CRITICAL (including S-CRITICAL)"
-                    value = f"{total:,}"
-        lines.append(f"- {label}: {value}")
+
+    critical_label, critical_value = "CRITICAL", count("critical")
+
+    if "critical" not in counts:
+        raw = data.get("raw_judgments")
+        total = (
+            raw.get("critical_including_s_critical") if isinstance(raw, dict) else None
+        )
+        if type(total) is int and total >= 0:
+            critical_label = "CRITICAL (including S-CRITICAL)"
+            critical_value = f"{total:,}"
+    lines.append(f"- {critical_label}: {critical_value}")
+
+    near = (
+        f"{count('early_near')}  |  {count('late_near')}"
+        if "early_near" in counts or "late_near" in counts
+        else count("near")
+    )
+    lines.append(f"- NEAR: {near}")
+    lines.append(f"- ERROR: {count('error')}")
+
     components = timing_components(data)
     if components is not None:
-        lines.append(f"\nTiming: `{components[0] / components[1]:+.1f} ms`")
+        suffix = (
+            " (Includes lasers)"
+            if components[1] == sum(data["timing_histogram"]) # Number of hits == data count in histo
+            else ""
+        )
+        lines.append(f"\nTiming: `{components[0] / components[1]:+.1f} ms`{suffix}")
+
     return "\n".join(lines)

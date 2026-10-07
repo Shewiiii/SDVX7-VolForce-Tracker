@@ -8,7 +8,7 @@ def judgment_mode(record: dict) -> bool | None:
 
 
 def judgment_counts(record: dict) -> dict:
-    """Read normalized screen counts, raw counters and bins are kept separately."""
+    """Read in-game counts."""
     raw_counts = record.get("judgments")
     if not isinstance(raw_counts, dict):
         return {}
@@ -20,7 +20,7 @@ def judgment_counts(record: dict) -> dict:
 
 
 def timing_components(record: dict) -> tuple[float, int] | None:
-    """Estimate weighted milliseconds using midpoints."""
+    """Estimate weighted milliseconds, correcting center inflation when possible."""
     histogram = record.get("timing_histogram")
     if (
         not isinstance(histogram, list)
@@ -32,6 +32,27 @@ def timing_components(record: dict) -> tuple[float, int] | None:
     if counts.get("near") != histogram[0] + histogram[6]:
         return None
     hits = sum(histogram)
+
+    raw = record.get("raw_judgments")
+    if judgment_mode(record) is True and isinstance(raw, dict):
+        just = raw.get("btfx_s_critical")
+        total = raw.get("critical_including_s_critical")
+        critical = counts.get("critical")
+        s_critical = counts.get("s_critical")
+        if (
+            all(
+                type(value) is int and value >= 0
+                for value in (just, total, critical, s_critical)
+            )
+            and total == s_critical + critical
+            and just <= s_critical
+            and total >= sum(histogram[1:6])
+        ):
+            side_hits = histogram[1] + histogram[2] + histogram[4] + histogram[5]
+            center_hits = just + critical - side_hits
+            if 0 <= center_hits <= histogram[3]:
+                hits = hits - histogram[3] + center_hits
+
     if hits == 0:
         return None
     weighted_ms = (

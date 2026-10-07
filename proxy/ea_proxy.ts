@@ -265,7 +265,7 @@ function captureJudgments(track) {
         // This layout omits ERROR: its outer bins match the scalar NEAR total.
         counts.early_near ??= histogram[0];
         counts.late_near ??= histogram[6];
-        // The inner timing bins are not the result screen's CRITICAL sides.
+        // The inner timing bins are not the result in-game's CRITICAL sides.
     }
     return { counts, raw, histogram };
 }

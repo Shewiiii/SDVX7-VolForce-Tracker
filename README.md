@@ -83,7 +83,13 @@ Let $\forall i \in [1, 5] \cap \mathbb{Z}$ $h_i$ the number of notes in its resp
 
 Thus:
 
-$Timing = \frac{87.5(h_6-h_0) + 37.5(h_5-h_1) + 25(h_4-h_2)}{\displaystyle\sum_{i=0}^{6} h_i}$ ms.
+$Timing = \frac{87.5(h_6-h_0) + 37.5(h_5-h_1) + 25(h_4-h_2)}{\sum_{i=0}^{6}h_i}$ ms.
+
+However, $h_i$ includes laser notes (which are always S-CRITICALs or ERRORs), which makes $Timing$ way more precise than it should be. But when S-CRITICAL is enabled, the game sends BT/FX S-CRITICAL data. We can then compensate for that inflation in S-CRITICALs:
+
+$Timing = \frac{87.5(h_6-h_0) + 37.5(h_5-h_1) + 25(h_4-h_2)}{\sum_{i=0}^{6}h_i - h_3 + h_3'}$ ms
+
+with $h_3' = SC_{\mathrm{BT/FX}} + C_{\mathrm{BT/FX}} - (h_1+h_2+h_4+h_5)$, leaving $h_3'$ only with BT/FX notes.
 
 ## Credits
 
