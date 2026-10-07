@@ -23,51 +23,32 @@ The script observes the game's e-amusement result requests through a local proxy
 	<img src="assets/img/performance.png" alt="VolForce Performance History embed" width="700">
 </p>
 
+## Requirements
+
+- Python 3.10+
+- NodeJS 22.5+
+
 ## Setup
 
-- Clone the repo and move it to sdvx' root folder
-- Install Node.js.
-- Clone Ryu's [RyuNET-core](https://github.com/Ryu7w7/RyuNET-core) repo, then move `RyuNET-core-master` next to `bot.py`. Your game's folder should look like this:
+- Download the ZIP of this repo under Code, unzip it, and place the main folder into your sdvx' game folder. It should look like:
 
 ```text
-SOUND VOLTEX NABLA/
-...
-|-- SDVX7-VolForce-Tracker-main/
-	|-- assets/
-	|-- proxy/
-	|-- RyuNET-core-master/
-	|-- tracker/
-	|-- .env
-	|-- .gitignore
-	|-- bot.py
+|-- SOUND VOLTEX NABLA/
+	|-- data/
 	...
+	|-- prop/
+	|-- screenshots/
+	|-- SDVX7-VolForce-Tracker-main/
+	...
+	|-- spice64.exe
+	|-- spicecfg.exe
 ```
 
-- Install the RyuNET-core Node.js dependencies once, so the local proxy can reuse its protocol decoders:
-
-```powershell
-cd C:\Path\To\RyuNET-core-master
-npm install
-```
-
-- Set Spice2x's EA Service URL to `http://127.0.0.1:8080/service`.
-- Create a Discord app
-- Install the needed Python requirements, use a venv as needed:
-
-```bash
-pip install -r requirements.txt
-```
-
-- Create and fill a .env from the template.
-- Edit `config.py` to customize the username, paths, and performance graph.
+- Create a [Discord app](https://discord.com/developers/applications).
+- Under `bot`, enable Message Content Intent, generate a token and copy it.
+- Run `setup.bat` and follow the instructions
+- Set Spice2x's EA Service URL to `http://127.0.0.1:8080/service`
 - Run `run_tracker.bat`, _then_ start the game. Create a shortcut of it for easy access !
-
-> [!NOTE]  
-> If you use a virtual environment, replace the Python launcher line. Replace `venv` with whatever the name of your venv is.
->
-> ```bat
-> start "SDVX Discord Bot" /D "%REPO_ROOT%" "%ComSpec%" /k "%REPO_ROOT%venv\Scripts\python.exe" "%REPO_ROOT%bot.py"
-> ```
 
 ## Limitations
 
@@ -96,4 +77,4 @@ with $h_3' = SC_{\mathrm{BT/FX}} + C_{\mathrm{BT/FX}} - (h_1+h_2+h_4+h_5)$, leav
 
 ## Credits
 
-- The local proxy reuses the e-amusement decoding utilities from [RyuNET-core](https://github.com/Ryu7w7/RyuNET-core).
+- The local proxy reuses the e-amusement decoding utilities from [RyuNET-core](https://github.com/Ryu7w7/RyuNET-core). Their GPL-3.0 license is downloaded alongside the decoder source in `runtime/LICENSE`.

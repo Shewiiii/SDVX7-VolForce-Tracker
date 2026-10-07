@@ -1,18 +1,21 @@
 import logging
+import os
 import sys
 from pathlib import Path
 
+from dotenv import load_dotenv
+
 REPO_ROOT = Path(__file__).resolve().parent
+load_dotenv(REPO_ROOT / ".env")
 GAME_ROOT = REPO_ROOT.parent
 
-SCORE_LOG_PATH = str(REPO_ROOT / "score_log.txt")
+SCORE_LOG_PATH = REPO_ROOT / "score_log.txt"
 TOTAL_VOLFORCE_CACHE_PATH = REPO_ROOT / "cache" / "total_volforce.json"
 VOLFORCE_HISTORY_PATH = REPO_ROOT / "cache" / "volforce_history.jsonl"
-MUSIC_DB_PATH = str(GAME_ROOT / "data" / "others" / "music_db.xml")
-CUSTOM_CHARTS_ROOT = GAME_ROOT / "data_mods" / "ryunet_custom"  # Set to None to disable
+MUSIC_DB_PATH = GAME_ROOT / "data" / "others" / "music_db.xml"
 PULLING_RATE = 1
 
-USERNAME = "Shewi"
+USERNAME = os.getenv("TRACKER_USERNAME") or "Shewi"
 FOOTER = "SDVX ∇ VolForce Tracker"
 
 DIFF_NAMES = {

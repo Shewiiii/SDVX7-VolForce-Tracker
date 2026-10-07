@@ -9,7 +9,6 @@ from discord.ext import tasks
 from dotenv import load_dotenv
 
 from config import (
-    CUSTOM_CHARTS_ROOT,
     DIFF_NAMES,
     FOOTER,
     MUSIC_DB_PATH,
@@ -33,7 +32,7 @@ if not BOT_TOKEN or not USER_ID_RAW:
     raise ValueError("Missing BOT_TOKEN or USER_ID in .env file")
 
 USER_ID = int(USER_ID_RAW)
-state = BotState(USER_ID, MusicCatalog(MUSIC_DB_PATH, CUSTOM_CHARTS_ROOT))
+state = BotState(USER_ID, MusicCatalog(MUSIC_DB_PATH))
 state.music.refresh()
 
 intents = discord.Intents.default()
@@ -50,8 +49,8 @@ async def on_ready():
     log_path = SCORE_LOG_PATH
 
     # Initialize to end of file: ignore past runs, only send new ones
-    if os.path.exists(log_path):
-        last_read_pos = os.path.getsize(log_path)
+    if log_path.exists():
+        last_read_pos = log_path.stat().st_size
     else:
         last_read_pos = 0
 
@@ -73,14 +72,14 @@ async def on_ready():
 async def watch_score_log():
     global last_read_pos
     log_path = SCORE_LOG_PATH
-    if not os.path.exists(log_path):
+    if not log_path.exists():
         return
 
-    curr_size = os.path.getsize(log_path)
+    curr_size = log_path.stat().st_size
     if curr_size <= last_read_pos:
         return
 
-    with open(log_path, "r", encoding="utf-8", errors="replace") as f:  # noqa: ASYNC230
+    with log_path.open("r", encoding="utf-8", errors="replace") as f:
         f.seek(last_read_pos)
         new_lines = f.readlines()
         last_read_pos = f.tell()
@@ -120,7 +119,6 @@ async def watch_score_log():
 
             # Determine cover image & accent color
             embed_color = discord.Color(0xE0218A)
-
             cover_bytes = await asyncio.to_thread(
                 state.music.find_jacket, mid, diff_idx
             )

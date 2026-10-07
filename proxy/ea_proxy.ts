@@ -16,11 +16,14 @@ const listenPort = Number(process.env.TRACKER_PROXY_PORT || 8080);
 const upstreamUrl = new URL(
     process.env.TRACKER_UPSTREAM || "http://ea.ryu7w7.xyz",
 );
-const scoreLogPath = path.join(repoRoot, "score_log.txt");
+const scoreLogPath =
+    process.env.TRACKER_SCORE_LOG || path.join(repoRoot, "score_log.txt");
 const ryuRoot = process.env.RYUNET_ROOT;
 
 if (!ryuRoot) {
-    throw new Error("RYUNET_ROOT must point to the RyuNET-core-master folder.");
+    throw new Error(
+        "RYUNET_ROOT must point to the protocol decoder folder. Run setup.bat.",
+    );
 }
 
 const { KonmaiEncrypt } = require(
@@ -32,19 +35,18 @@ const xmlParser = require(
     path.join(ryuRoot, "node_modules", "fast-xml-parser"),
 );
 
-const musicDbPath = path.join(repoRoot, "..", "data", "others", "music_db.xml");
-const customChartsRoot = process.env.TRACKER_CUSTOM_CHARTS_ROOT;
-const musicDbPaths = [musicDbPath];
-if (customChartsRoot !== "disabled") {
-    musicDbPaths.push(
-        path.join(
-            customChartsRoot ||
-                path.join(repoRoot, "..", "data_mods", "ryunet_custom"),
-            "others",
-            "music_db.merged.xml",
-        ),
-    );
-}
+const gameRoot = path.resolve(repoRoot, "..");
+const musicDbPath = path.join(gameRoot, "data", "others", "music_db.xml");
+const musicDbPaths = [
+    musicDbPath,
+    path.join(
+        gameRoot,
+        "data_mods",
+        "ryunet_custom",
+        "others",
+        "music_db.merged.xml",
+    ),
+];
 const chartLevelStore = new ChartLevelStore(musicDbPaths, (raw) => {
     const validation = xmlParser.validate(raw.toString("latin1"));
     if (validation !== true) throw new Error(validation.err.msg);

@@ -7,7 +7,6 @@ from collections import Counter
 from datetime import datetime
 from functools import lru_cache
 from io import BytesIO
-from pathlib import Path
 
 import discord
 
@@ -35,7 +34,7 @@ logger = logging.getLogger("sdvx_bot")
 @lru_cache(maxsize=1)
 def load_appeal_card_textures() -> dict[int, str]:
     """Use the game's mapping: card IDs do not always match texture filenames."""
-    path = Path(MUSIC_DB_PATH).parent / "appeal_card.xml"
+    path = MUSIC_DB_PATH.parent / "appeal_card.xml"
     try:
         raw = path.read_text(encoding="cp932", errors="replace")
         root = ET.fromstring(re.sub(r"<\?xml[^>]*\?>", "", raw, count=1))
@@ -57,7 +56,7 @@ def find_local_appeal_card(appeal_id: int | None) -> bytes | None:
     texture = load_appeal_card_textures().get(appeal_id)
     if not texture:
         return None
-    path = Path(MUSIC_DB_PATH).parent.parent / "graphics" / "ap_card" / f"{texture}.png"
+    path = MUSIC_DB_PATH.parent.parent / "graphics" / "ap_card" / f"{texture}.png"
     try:
         return path.read_bytes()
     except OSError as error:

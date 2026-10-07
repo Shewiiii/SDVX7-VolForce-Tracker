@@ -63,7 +63,7 @@ def _performance_background(size: tuple[int, int]) -> Image.Image:
 
 
 def load_play_history(
-    log_path: str,
+    log_path: Path,
     user_id: int,
     default_user_id: int,
     levels: dict,
@@ -166,7 +166,7 @@ def best_play_message(record: dict, history: list[dict]) -> str | None:
 
 
 def load_performance_history(
-    log_path: str,
+    log_path: Path,
     user_id: int,
     default_user_id: int,
     levels: dict,

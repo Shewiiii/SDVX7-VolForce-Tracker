@@ -63,12 +63,13 @@ def _read_database(path: Path) -> tuple[dict, dict, dict, dict, dict]:
 
 
 class MusicCatalog:
-    def __init__(self, base_database: str | Path, custom_root: str | Path | None):
+    def __init__(self, base_database: str | Path):
         self.base_root = Path(base_database).parent.parent
-        self.custom_root = Path(custom_root) if custom_root is not None else None
-        self.paths = [Path(base_database)]
-        if self.custom_root is not None:
-            self.paths.append(self.custom_root / "others" / "music_db.merged.xml")
+        self.custom_root = self.base_root.parent / "data_mods" / "ryunet_custom"
+        self.paths = [
+            Path(base_database),
+            self.custom_root / "others" / "music_db.merged.xml",
+        ]
         self._signatures = {}
         self._sources = {}
         self.titles, self.artists, self.levels = {}, {}, {}
@@ -111,11 +112,12 @@ class MusicCatalog:
             title_readings, artist_readings = {}, {}
             for path in self.paths:
                 (
-                    source_titles, source_artists, source_levels,
-                    source_title_readings, source_artist_readings,
-                ) = self._sources.get(
-                    path, ({}, {}, {}, {}, {})
-                )
+                    source_titles,
+                    source_artists,
+                    source_levels,
+                    source_title_readings,
+                    source_artist_readings,
+                ) = self._sources.get(path, ({}, {}, {}, {}, {}))
                 titles.update(source_titles)
                 artists.update(source_artists)
                 title_readings.update(source_title_readings)
@@ -130,9 +132,7 @@ class MusicCatalog:
 
     def find_jacket(self, mid: int, difficulty: int) -> bytes | None:
         """Resolve jacket files with mod precedence, then original-game fallback."""
-        roots = ([self.custom_root] if self.custom_root is not None else []) + [
-            self.base_root
-        ]
+        roots = [self.custom_root, self.base_root]
         folders = []
         for root in roots:
             music_dir = root / "music"

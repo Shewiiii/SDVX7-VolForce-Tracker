@@ -2,8 +2,11 @@
 sdvx_rpc.py
 cache/
 __pycache__/
+.venv/
+venv/
 RyuNET-core-master
 score_log.txt
 spice2x.github.io-main
 .github
 tests
+runtime
