@@ -9,7 +9,7 @@ import venv
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parent
+REPO_ROOT = Path(__file__).resolve().parents[1]
 RUNTIME_ROOT = REPO_ROOT / "runtime"
 VENV_ROOT = REPO_ROOT / ".venv"
 DECODER_COMMIT_SHA = "c1a01de4b9412d9bb3f9a5eed452f2c221739aff"  # Oct 2, 2026
@@ -134,7 +134,7 @@ def install() -> Path:
             "install",
             "--disable-pip-version-check",
             "-r",
-            str(REPO_ROOT / "requirements.txt"),
+            str(RUNTIME_ROOT / "requirements.txt"),
         ]
     )
     run([str(python), "-c", PYTHON_IMPORTS])
@@ -199,7 +199,7 @@ def main() -> int:
     try:
         python = install()
         run(
-            [str(python), "-c", "from setup_tracker import configure; configure()"],
+            [str(python), "-c", "from tracker.setup import configure; configure()"],
             cwd=REPO_ROOT,
         )
         return 0

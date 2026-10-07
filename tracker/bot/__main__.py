@@ -15,12 +15,13 @@ from config import (
     PULLING_RATE,
     SCORE_LOG_PATH,
 )
-from tracker.bot import register_commands
 from tracker.bot.images import get_accent_color
 from tracker.bot.scores import format_score_breakdown, get_grade_coeff
 from tracker.bot.state import BotState
 from tracker.music import MusicCatalog
 from tracker.performance_chart import best_play_message, load_play_history
+
+from . import register_commands
 
 logger = logging.getLogger("sdvx_bot")
 

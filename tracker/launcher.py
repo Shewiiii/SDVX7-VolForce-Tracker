@@ -7,7 +7,7 @@ import sys
 import time
 from pathlib import Path
 
-from setup_tracker import (
+from .setup import (
     PYTHON_IMPORTS,
     REPO_ROOT,
     decoder_environment,
@@ -27,6 +27,11 @@ def prepare() -> tuple[list[list[str]], dict[str, str], Path]:
         raise RuntimeError("Python requirements are missing. Run setup.bat first.")
     # config loads this repository's .env, even when launched from another folder.
     from config import MUSIC_DB_PATH, SCORE_LOG_PATH
+
+    legacy_score_log = REPO_ROOT / "score_log.txt"
+    if legacy_score_log.is_file() and not SCORE_LOG_PATH.exists():
+        SCORE_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+        legacy_score_log.rename(SCORE_LOG_PATH)
 
     if not os.getenv("BOT_TOKEN"):
         raise RuntimeError("BOT_TOKEN is missing. Run setup.bat to configure Discord.")
@@ -71,7 +76,7 @@ def prepare() -> tuple[list[list[str]], dict[str, str], Path]:
             str(root / "node_modules/ts-node/register"),
             str(REPO_ROOT / "proxy/ea_proxy.ts"),
         ],
-        [sys.executable, "-u", str(REPO_ROOT / "bot.py")],
+        [sys.executable, "-u", "-m", "tracker.bot"],
     ]
     return commands, env, root
 

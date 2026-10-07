@@ -9,4 +9,8 @@ score_log.txt
 spice2x.github.io-main
 .github
 tests
-runtime
+runtime/*
+!runtime/package.json
+!runtime/package-lock.json
+!runtime/tsconfig.json
+!runtime/requirements.txt

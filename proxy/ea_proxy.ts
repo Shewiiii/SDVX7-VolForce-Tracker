@@ -17,7 +17,8 @@ const upstreamUrl = new URL(
     process.env.TRACKER_UPSTREAM || "http://ea.ryu7w7.xyz",
 );
 const scoreLogPath =
-    process.env.TRACKER_SCORE_LOG || path.join(repoRoot, "score_log.txt");
+    process.env.TRACKER_SCORE_LOG || path.join(repoRoot, "cache", "score_log.txt");
+fs.mkdirSync(path.dirname(scoreLogPath), { recursive: true });
 const ryuRoot = process.env.RYUNET_ROOT;
 
 if (!ryuRoot) {
