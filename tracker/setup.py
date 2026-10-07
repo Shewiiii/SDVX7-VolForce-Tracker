@@ -80,9 +80,8 @@ def find_decoder_root(node: str) -> Path | None:
     override = os.getenv("RYUNET_ROOT")
     if override:
         root = Path(override).expanduser().resolve()
-        if not probe_decoders(node, root):
-            raise RuntimeError("RYUNET_ROOT is set, but its decoders cannot be loaded.")
-        return root
+        if probe_decoders(node, root):
+            return root
     for root in (RUNTIME_ROOT, REPO_ROOT / "RyuNET-core-master"):
         if probe_decoders(node, root):
             return root
