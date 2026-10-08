@@ -45,10 +45,11 @@ The script observes the game's e-amusement result requests through a local proxy
 ```
 
 - Create a [Discord app](https://discord.com/developers/applications).
-- Under `bot`, enable Message Content Intent, generate a token and copy it.
+- Under `Installation`, copy the install link, paste it anywhere in Discord, then click on it to user-install the app.
+- Under `Bot`, enable Message Content Intent, generate a token and copy it.
 - Run `setup.bat` and follow the instructions
 - Set Spice2x's EA Service URL to `http://127.0.0.1:8080/service`
-- Run `run_tracker.bat`, _then_ start the game. Create a shortcut of it for easy access !
+- Run `SDVX-∇-VolForce-Tracker.bat`, _then_ start the game. Create a shortcut of it for easy access !
 
 ## Limitations
 
