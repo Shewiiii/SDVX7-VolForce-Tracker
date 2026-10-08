@@ -163,7 +163,7 @@ def prompt(label: str, default: str = "", *, show_default: bool = True) -> str:
 def configure() -> None:
     from dotenv import dotenv_values, set_key
 
-    from config import USERNAME
+    from config import SPENDING_CURRENCY, USERNAME
 
     env_path = REPO_ROOT / ".env"
     existing = dotenv_values(env_path)
@@ -184,11 +184,22 @@ def configure() -> None:
         print("Enter the numeric user ID, not your username.")
         user_id = ""
     username = prompt("Display name for stats", USERNAME)
+    currency = existing.get("TRACKER_CURRENCY") or SPENDING_CURRENCY
+    while True:
+        currency = prompt(
+            "Currency for spending estimates, in ISO format, for example EUR, USD, AUD, CNY, KRW.",
+            currency,
+        ).strip().upper()
+        if currency.isascii() and currency.isalpha() and len(currency) == 3:
+            break
+        print("Enter a three-letter currency code.")
+        currency = ""
 
     for key, value in {
         "BOT_TOKEN": token,
         "USER_ID": user_id,
         "TRACKER_USERNAME": username,
+        "TRACKER_CURRENCY": currency,
     }.items():
         set_key(env_path, key, value, quote_mode="always")
     print("Configuration saved.")

@@ -15,11 +15,13 @@ from config import (
     FOOTER,
     MUSIC_DB_PATH,
     SCORE_LOG_PATH,
+    SPENDING_CURRENCY,
     TOTAL_VOLFORCE_CACHE_PATH,
     USERNAME,
 )
 from tracker.music import MusicCatalog
 from tracker.performance_chart import load_play_history
+from tracker.spending import START_PRICES, get_jpy_rate, load_play_count
 from tracker.timing import load_timing_summary
 from tracker.total_volforce import load_total_volforce
 
@@ -70,6 +72,8 @@ def build_profile_embed(
     timing: dict | None = None,
     *,
     music: MusicCatalog,
+    play_count: int | None = None,
+    exchange_rate: dict | None = None,
 ) -> discord.Embed:
     player = snapshot["player"] if snapshot else {}
     name = discord.utils.escape_markdown(str(player.get("name") or USERNAME))[:100]
@@ -148,7 +152,7 @@ def build_profile_embed(
                 6: "PUC",
             }
             embed.add_field(
-                name="Clear Marks",
+                name="Clear Marks per play",
                 value=" · ".join(
                     f"{clear_names[clear]}: {count:,}"
                     for clear, count in sorted(clears.items())
@@ -159,7 +163,7 @@ def build_profile_embed(
                 get_grade_name(record["score"]) for record in records.values()
             )
             embed.add_field(
-                name="Grades",
+                name="Grades per play",
                 value=" · ".join(
                     f"{grade}: {grades[grade]:,}"
                     for grade in (
@@ -178,44 +182,12 @@ def build_profile_embed(
                 ),
                 inline=False,
             )
-        updated = int(snapshot["updated_at"].timestamp())
-        captured = f"Charts: <t:{updated}:R>"
-        if snapshot["player_updated_at"]:
-            try:
-                timestamp = datetime.fromisoformat(
-                    snapshot["player_updated_at"].replace("Z", "+00:00")
-                )
-                if timestamp.tzinfo is not None:
-                    captured += f"\nAccount details: <t:{int(timestamp.timestamp())}:R>"
-            except (ValueError, TypeError, AttributeError):
-                pass
-        embed.add_field(name="Last captured", value=captured, inline=False)
-        if not player:
-            embed.description = (
-                "Log into the game with your card to capture account details."
-            )
     else:
         embed.description = (
             "Account details and Total VolForce are unavailable. Log into the game"
             " with your card to capture your saved profile."
         )
-    if history:
-        values = [play["play_vf"] for play in history]
-        first, last = (
-            int(history[index]["timestamp"].timestamp()) for index in (0, -1)
-        )
-        embed.add_field(
-            name="Tracked non-Crash plays",
-            value=f"{len(history):,} plays · Best {max(values):.3f} · Average {math.fsum(values) / len(values):.3f}"
-            f"\nFirst: <t:{first}:f>\nLatest: <t:{last}:f>",
-            inline=False,
-        )
-    else:
-        embed.add_field(
-            name="Tracked non-Crash plays",
-            value="No local history available.",
-            inline=False,
-        )
+
     timing_note = (
         "[Non S-CRITICAL scores are not included]"
         "(https://github.com/Shewiiii/SDVX7-VolForce-Tracker#limitations)"
@@ -235,6 +207,56 @@ def build_profile_embed(
             value=f"No valid S-CRITICAL timing data saved yet.\n{timing_note}",
             inline=False,
         )
+
+    spending = "Local play count unavailable."
+    if play_count is not None:
+        currency = SPENDING_CURRENCY.strip().upper()
+        lines = [f"{play_count:,} plays on an arcade cabinet corresponds to:"]
+        for label, songs, price in START_PRICES:
+            yen = play_count / songs * price
+            amount = f"¥{yen:,.0f}"
+            if exchange_rate is not None and currency != "JPY":
+                amount += f" (≈ {yen * exchange_rate['rate']:,.2f} {currency})"
+            lines.append(f"- {label}: {amount}")
+        spending = "\n".join(lines)
+    embed.add_field(name="Spending", value=spending, inline=False)
+
+    if history:
+        values = [play["play_vf"] for play in history]
+        first, last = (
+            int(history[index]["timestamp"].timestamp()) for index in (0, -1)
+        )
+        embed.add_field(
+            name="Tracked non-Crash plays",
+            value=f"{len(history):,} plays · Best {max(values):.3f} · Average {math.fsum(values) / len(values):.3f}"
+            f"\nFirst: <t:{first}:f>\nLatest: <t:{last}:f>",
+            inline=False,
+        )
+    else:
+        embed.add_field(
+            name="Tracked non-Crash plays",
+            value="No local history available.",
+            inline=False,
+        )
+
+    if snapshot:
+        updated = int(snapshot["updated_at"].timestamp())
+        captured = f"Charts: <t:{updated}:R>"
+        if snapshot["player_updated_at"]:
+            try:
+                timestamp = datetime.fromisoformat(
+                    snapshot["player_updated_at"].replace("Z", "+00:00")
+                )
+                if timestamp.tzinfo is not None:
+                    captured += f"\nAccount details: <t:{int(timestamp.timestamp())}:R>"
+            except (ValueError, TypeError, AttributeError):
+                pass
+        embed.add_field(name="Last captured", value=captured, inline=False)
+        if not player:
+            embed.description = (
+                "Log into the game with your card to capture account details."
+            )
+
     embed.set_footer(text=f"{FOOTER}  ·  RyuNET")
     return embed
 
@@ -271,6 +293,7 @@ class Profile(discord.Cog):
         except (OSError, ValueError) as error:
             logger.warning("Could not load profile's local history: %s", error)
             history = []
+
         try:
             timing = await asyncio.to_thread(
                 load_timing_summary, SCORE_LOG_PATH, self.state.user_id
@@ -278,7 +301,29 @@ class Profile(discord.Cog):
         except (OSError, ValueError) as error:
             logger.warning("Could not load timing history: %s", error)
             timing = None
-        embed = build_profile_embed(snapshot, history, timing, music=music)
+
+        try:
+            play_count = await asyncio.to_thread(
+                load_play_count, SCORE_LOG_PATH, self.state.user_id
+            )
+        except OSError as error:
+            logger.warning("Could not count profile's local plays: %s", error)
+            play_count = None
+
+        exchange_rate = (
+            await asyncio.to_thread(get_jpy_rate, SPENDING_CURRENCY)
+            if play_count is not None
+            else None
+        )
+
+        embed = build_profile_embed(
+            snapshot,
+            history,
+            timing,
+            music=music,
+            play_count=play_count,
+            exchange_rate=exchange_rate,
+        )
         appeal_id = snapshot["player"].get("appeal_id") if snapshot else None
         card_bytes = await asyncio.to_thread(find_local_appeal_card, appeal_id)
         icon_bytes = await asyncio.to_thread(
@@ -286,9 +331,11 @@ class Profile(discord.Cog):
         )
         files = []
         attachment = {}
+
         if card_bytes:
             embed.set_thumbnail(url="attachment://appeal_card.png")
             files.append(discord.File(BytesIO(card_bytes), filename="appeal_card.png"))
+
         if icon_bytes:
             embed.set_author(
                 name=embed.author.name, icon_url="attachment://volforce_class.png"
@@ -296,8 +343,10 @@ class Profile(discord.Cog):
             files.append(
                 discord.File(BytesIO(icon_bytes), filename="volforce_class.png")
             )
+
         if files:
             attachment["files"] = files
+
         await ctx.respond(
             embed=embed,
             allowed_mentions=discord.AllowedMentions.none(),

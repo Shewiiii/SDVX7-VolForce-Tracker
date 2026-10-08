@@ -17,6 +17,7 @@ PULLING_RATE = 1
 
 USERNAME = os.getenv("TRACKER_USERNAME") or "Shewi"
 FOOTER = "SDVX ∇ VolForce Tracker"
+SPENDING_CURRENCY = (os.getenv("TRACKER_CURRENCY") or "USD").strip().upper()
 
 DIFF_NAMES = {
     0: "NOV",
