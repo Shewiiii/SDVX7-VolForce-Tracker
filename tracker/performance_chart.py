@@ -20,10 +20,10 @@ from config import (
     PERFORMANCE_GRID_COLOR,
     PERFORMANCE_IMAGE_HEIGHT,
     PERFORMANCE_IMAGE_WIDTH,
-    PERFORMANCE_MINIMUM_COLOR,
     PERFORMANCE_PANEL_COLOR,
     PERFORMANCE_PANEL_DIM,
     PERFORMANCE_TEXT_COLOR,
+    PERFORMANCE_TOP50_COLOR,
     PERFORMANCE_TOTAL_COLOR,
     REPO_ROOT,
 )
@@ -315,13 +315,13 @@ def render_performance_graph(
     if threshold_segments:
         for points in threshold_segments:
             if len(points) > 1:
-                draw.line(points, fill=PERFORMANCE_MINIMUM_COLOR, width=pixels(2))
+                draw.line(points, fill=PERFORMANCE_TOP50_COLOR, width=pixels(2))
             else:
                 x, y = points[0]
                 radius = pixels(3)
                 draw.ellipse(
                     (x - radius, y - radius, x + radius, y + radius),
-                    fill=PERFORMANCE_MINIMUM_COLOR,
+                    fill=PERFORMANCE_TOP50_COLOR,
                 )
 
     best = 0
@@ -399,7 +399,7 @@ def render_performance_graph(
         ("Avg 100", purple),
     ]
     if threshold_segments:
-        legend.append(("Top 50", PERFORMANCE_MINIMUM_COLOR))
+        legend.append(("Top 50", PERFORMANCE_TOP50_COLOR))
     if observations:
         legend.append(("Total VF", PERFORMANCE_TOTAL_COLOR))
     legend_width = sum(
