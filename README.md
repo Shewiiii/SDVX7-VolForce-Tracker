@@ -14,7 +14,7 @@ The script observes the game's e-amusement result requests through a local proxy
 	<img src="assets/img/profile.jpg" alt="Profile embed" width="700">
 </p>
 
-Currency convertion can be changed during setup and in `config.py`.
+Currency convertion can be changed during setup and in `.env` file.
 
 <p>
 	<img src="assets/img/top-plays.jpg" alt="Top Plays embed" width="700">
