@@ -18,7 +18,13 @@ START_PRICES = (
 
 def load_play_count(path: str | Path, user_id: int) -> int:
     """Count local attempts, including crashes and repeated charts."""
+    return load_play_summary(path, user_id)[0]
+
+
+def load_play_summary(path: str | Path, user_id: int) -> tuple[int, datetime | None]:
+    """Count every attempt and find the first logged play's timestamp."""
     count = 0
+    first = None
     with open(path, encoding="utf-8") as stream:
         for line in stream:
             try:
@@ -28,9 +34,18 @@ def load_play_count(path: str | Path, user_id: int) -> int:
                     and int(record.get("user_id", user_id)) == user_id
                 ):
                     count += 1
+                    if first is None:
+                        try:
+                            first = datetime.fromisoformat(
+                                record["received_at"].replace("Z", "+00:00")
+                            )
+                            if first.tzinfo is None:
+                                first = first.replace(tzinfo=timezone.utc)
+                        except (ValueError, TypeError, KeyError, AttributeError):
+                            first = None
             except (ValueError, TypeError, OverflowError):
                 continue
-    return count
+    return count, first
 
 
 @lru_cache(maxsize=8)

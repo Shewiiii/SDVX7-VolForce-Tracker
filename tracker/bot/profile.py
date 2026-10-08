@@ -21,7 +21,7 @@ from config import (
 )
 from tracker.music import MusicCatalog
 from tracker.performance_chart import load_play_history
-from tracker.spending import START_PRICES, get_jpy_rate, load_play_count
+from tracker.spending import START_PRICES, get_jpy_rate, load_play_summary
 from tracker.timing import load_timing_summary
 from tracker.total_volforce import load_total_volforce
 
@@ -74,14 +74,19 @@ def build_profile_embed(
     music: MusicCatalog,
     play_count: int | None = None,
     exchange_rate: dict | None = None,
+    tracking_since: datetime | None = None,
 ) -> discord.Embed:
     player = snapshot["player"] if snapshot else {}
     name = discord.utils.escape_markdown(str(player.get("name") or USERNAME))[:100]
     embed = discord.Embed(title="", color=discord.Color(0xCBA6F7))
     embed.set_author(name=f"{name}'s Profile")
+
+    # SDVX ID
     code = player.get("sdvx_id") or player.get("code")
     if code:
         embed.add_field(name="SDVX ID", value=discord.utils.escape_markdown(str(code)))
+
+    # DAN
     dan_names = {
         0: "Unranked",
         1: "1st Dan",
@@ -105,6 +110,7 @@ def build_profile_embed(
             )
             embed.add_field(name=label, value=display)
 
+    # VF STATS
     def chart_text(chart: dict) -> str:
         mid, difficulty = chart["music_id"], chart["diff_idx"]
         title = discord.utils.escape_markdown(
@@ -122,10 +128,6 @@ def build_profile_embed(
         if volforce_class:
             volforce_text += f", {volforce_class[1]}"
         embed.add_field(name="Total VolForce", value=volforce_text)
-        embed.add_field(
-            name="Saved charts",
-            value=f"{snapshot['chart_count']:,} charts across {snapshot['song_count']:,} songs",
-        )
         if snapshot["best_chart"]:
             embed.add_field(
                 name="Best chart VolForce",
@@ -134,11 +136,14 @@ def build_profile_embed(
             )
             worst = snapshot["worst_top_chart"]
             value = chart_text(worst)
-            embed.add_field(name="Lowest VolForce in top 50", value=value, inline=False)
             embed.add_field(
-                name="Top 50 average", value=f"`{snapshot['top_average']:.3f}`"
+                name="Worst chart VolForce in top 50", value=value, inline=False
+            )
+            embed.add_field(
+                name="Top 50 average VolForce", value=f"`{snapshot['top_average']:.3f}`"
             )
 
+        # CLEAR MARKS & GRADES
         records = snapshot["chart_records"]
         if records:
             clears = Counter(record["clear_type"] for record in records.values())
@@ -188,6 +193,7 @@ def build_profile_embed(
             " with your card to capture your saved profile."
         )
 
+    # TIMING
     timing_note = (
         "[Non S-CRITICAL scores are not included]"
         "(https://github.com/Shewiiii/SDVX7-VolForce-Tracker#limitations)"
@@ -208,6 +214,7 @@ def build_profile_embed(
             inline=False,
         )
 
+    # SPENDING
     spending = "Local play count unavailable."
     if play_count is not None:
         currency = SPENDING_CURRENCY.strip().upper()
@@ -221,41 +228,54 @@ def build_profile_embed(
         spending = "\n".join(lines)
     embed.add_field(name="Spending", value=spending, inline=False)
 
+    # TRACKING DETAILS
+    tracking = [
+        f"- Saved charts: {snapshot['chart_count']:,} charts across {snapshot['song_count']:,} songs"
+        if snapshot
+        else "- Saved charts: Unavailable."
+    ]
     if history:
         values = [play["play_vf"] for play in history]
-        first, last = (
-            int(history[index]["timestamp"].timestamp()) for index in (0, -1)
-        )
-        embed.add_field(
-            name="Tracked non-Crash plays",
-            value=f"{len(history):,} plays · Best {max(values):.3f} · Average {math.fsum(values) / len(values):.3f}"
-            f"\nFirst: <t:{first}:f>\nLatest: <t:{last}:f>",
-            inline=False,
+        tracking.append(
+            f"- Non-Crash: {len(history):,} plays · Average VolForce `{math.fsum(values) / len(values):.3f}`"
         )
     else:
-        embed.add_field(
-            name="Tracked non-Crash plays",
-            value="No local history available.",
-            inline=False,
-        )
+        tracking.append("- Non-Crash: 0 plays")
+    tracking.append(
+        f"- Total: {play_count:,} plays"
+        if play_count is not None
+        else "- Total: Unavailable."
+    )
+    tracking.append(
+        f"- Tracking since <t:{int(tracking_since.timestamp())}:f>"
+        if tracking_since is not None
+        else "- Tracking since unavailable."
+    )
+    embed.add_field(
+        name="Tracking details",
+        value="\n".join(tracking),
+        inline=False,
+    )
 
+    # LAST CAPTURED
     if snapshot:
+        prefix = "> Last update:\n"
         updated = int(snapshot["updated_at"].timestamp())
-        captured = f"Charts: <t:{updated}:R>"
+        captured = f"{prefix}> Charts <t:{updated}:R>"
         if snapshot["player_updated_at"]:
             try:
                 timestamp = datetime.fromisoformat(
                     snapshot["player_updated_at"].replace("Z", "+00:00")
                 )
                 if timestamp.tzinfo is not None:
-                    captured += f"\nAccount details: <t:{int(timestamp.timestamp())}:R>"
+                    captured += (
+                        f"\n> Account details <t:{int(timestamp.timestamp())}:R>"
+                    )
             except (ValueError, TypeError, AttributeError):
                 pass
-        embed.add_field(name="Last captured", value=captured, inline=False)
+        embed.add_field(name="", value=captured, inline=False)
         if not player:
-            embed.description = (
-                "Log into the game with your card to capture account details."
-            )
+            embed.description = f"{prefix}> Log into the game with your card to capture account details."
 
     embed.set_footer(text=f"{FOOTER}  ·  RyuNET")
     return embed
@@ -303,12 +323,13 @@ class Profile(discord.Cog):
             timing = None
 
         try:
-            play_count = await asyncio.to_thread(
-                load_play_count, SCORE_LOG_PATH, self.state.user_id
+            play_count, tracking_since = await asyncio.to_thread(
+                load_play_summary, SCORE_LOG_PATH, self.state.user_id
             )
         except OSError as error:
             logger.warning("Could not count profile's local plays: %s", error)
             play_count = None
+            tracking_since = None
 
         exchange_rate = (
             await asyncio.to_thread(get_jpy_rate, SPENDING_CURRENCY)
@@ -323,6 +344,7 @@ class Profile(discord.Cog):
             music=music,
             play_count=play_count,
             exchange_rate=exchange_rate,
+            tracking_since=tracking_since,
         )
         appeal_id = snapshot["player"].get("appeal_id") if snapshot else None
         card_bytes = await asyncio.to_thread(find_local_appeal_card, appeal_id)
