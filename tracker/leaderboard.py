@@ -52,7 +52,7 @@ def load_chart_plays(
     )
 
 
-def chart_medal(
+def chart_mark(
     snapshot: dict | None, music_id: int, difficulty: int, plays: list[dict]
 ) -> int | None:
     if snapshot:

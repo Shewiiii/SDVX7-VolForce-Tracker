@@ -5,7 +5,7 @@ from io import BytesIO
 import discord
 
 from config import DIFF_NAMES, FOOTER, SCORE_LOG_PATH, TOTAL_VOLFORCE_CACHE_PATH
-from tracker.leaderboard import chart_medal, load_chart_plays
+from tracker.leaderboard import chart_mark, load_chart_plays
 from tracker.song_search import SongSearch
 from tracker.total_volforce import load_total_volforce
 
@@ -51,7 +51,7 @@ def build_leaderboard_embed(
     music_id: int,
     difficulty: int,
     plays: list[dict],
-    medal: int | None,
+    mark: int | None,
     page: int = 0,
     color: discord.Color | None = None,
     has_jacket: bool = False,
@@ -65,7 +65,7 @@ def build_leaderboard_embed(
     level = music.levels.get(music_id, {}).get(difficulty, 0)
     embed = discord.Embed(
         title=f"{artist} - {title}"[:256],
-        description=f"**Difficulty:** {DIFF_NAMES.get(difficulty, 'UNK')} ({level:.1f})\n**Medal:** {CLEAR_NAMES.get(medal, 'Unknown')}",
+        description=f"**Difficulty:** {DIFF_NAMES.get(difficulty, 'UNK')} ({level:.1f})\n**Clear Mark:** {CLEAR_NAMES.get(mark, 'Unknown')}",
         color=color or discord.Color(0xCBA6F7),
     )
     start = page * PAGE_SIZE
@@ -161,7 +161,7 @@ class Leaderboard(discord.Cog):
             snapshot = await asyncio.to_thread(
                 load_total_volforce, TOTAL_VOLFORCE_CACHE_PATH
             )
-            medal = chart_medal(snapshot, music_id, difficulty, plays)
+            mark = chart_mark(snapshot, music_id, difficulty, plays)
             jacket = await asyncio.to_thread(music.find_jacket, music_id, difficulty)
             color = discord.Color(0xCBA6F7)
             if jacket:
@@ -171,7 +171,7 @@ class Leaderboard(discord.Cog):
 
             def render(page):
                 return build_leaderboard_embed(
-                    music, music_id, difficulty, plays, medal, page, color, bool(jacket)
+                    music, music_id, difficulty, plays, mark, page, color, bool(jacket)
                 )
 
             attachment = (
