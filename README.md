@@ -81,4 +81,4 @@ with $h_3' = SC_{\mathrm{BT/FX}} + C_{\mathrm{BT/FX}} - (h_1+h_2+h_4+h_5)$, leav
 
 ## Credits
 
-- The local proxy reuses the e-amusement decoding utilities from [RyuNET-core](https://github.com/Ryu7w7/RyuNET-core). Their GPL-3.0 license is downloaded alongside the decoder source in `runtime/LICENSE`.
+- The local proxy reuses the e-amusement decoding utilities from [RyuNET-core](https://github.com/Ryu7w7/RyuNET-core).
