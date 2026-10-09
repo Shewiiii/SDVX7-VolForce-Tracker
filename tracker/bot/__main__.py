@@ -77,6 +77,10 @@ async def watch_score_log():
         return
 
     curr_size = log_path.stat().st_size
+    if curr_size < last_read_pos:
+        # If fake scores are added then removed to test the bot
+        last_read_pos = curr_size
+        return
     if curr_size <= last_read_pos:
         return
 

@@ -22,7 +22,8 @@ def judgment_counts(record: dict) -> dict:
 def timing_components(
     record: dict, *, require_btfx: bool = False
 ) -> tuple[float, int] | None:
-    """Estimate weighted milliseconds, correcting center inflation when possible."""
+    """Estimate milliseconds, correcting center inflation.
+    Uses the in-game convention, early positive, late negative."""
     histogram = record.get("timing_histogram")
     if (
         not isinstance(histogram, list)
@@ -60,9 +61,9 @@ def timing_components(
     if hits == 0 or (require_btfx and not has_btfx_timing):
         return None
     weighted_ms = (
-        (histogram[6] - histogram[0]) * 87.5
-        + (histogram[5] - histogram[1]) * 37.5
-        + (histogram[4] - histogram[2]) * 25.0
+        (histogram[0] - histogram[6]) * 87.5
+        + (histogram[1] - histogram[5]) * 37.5
+        + (histogram[2] - histogram[4]) * 25.0
     )
     return weighted_ms, hits
 

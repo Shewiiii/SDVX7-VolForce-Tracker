@@ -202,7 +202,7 @@ def build_profile_embed(
         ms = timing["average_ms"]
         embed.add_field(
             name="Timing",
-            value=f"`{ms:+.1f} ms` ({'Early' if ms < 0 else 'Late' if ms > 0 else 'Neutral'})"
+            value=f"`{ms:+.1f} ms` {'(Early)' if ms > 0 else '(Late)' if ms < 0 else ''}"
             f"\nBased on {timing['hits']:,} notes, across {timing['plays']:,} plays"
             f"\n{timing_note}",
             inline=False,

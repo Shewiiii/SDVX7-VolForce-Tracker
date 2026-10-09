@@ -76,10 +76,13 @@ def format_score_breakdown(data: dict) -> str:
     components = timing_components(data)
     if components is not None:
         suffix = (
-            " (Includes lasers)"
-            if components[1] == sum(data["timing_histogram"]) # Number of hits == data count in histo
+            "(Includes lasers)"
+            if components[1]
+            == sum(data["timing_histogram"])  # Number of hits == data count in histo
             else ""
         )
-        lines.append(f"\nTiming: `{components[0] / components[1]:+.1f} ms`{suffix}")
+        ms = components[0] / components[1]
+        early_late = "🐇" if ms > 0 else "🐢" if ms < 0 else "🐈"
+        lines.append(f"\nTiming: `{ms:+.1f} ms` {early_late} {suffix}")
 
     return "\n".join(lines)
