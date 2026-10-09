@@ -11,7 +11,7 @@ GAME_ROOT = REPO_ROOT.parent
 
 SCORE_LOG_PATH = REPO_ROOT / "score_log.txt"
 TOTAL_VOLFORCE_CACHE_PATH = REPO_ROOT / "cache" / "total_volforce.json"
-VOLFORCE_HISTORY_PATH = REPO_ROOT / "cache" / "volforce_history.jsonl"
+VOLFORCE_HISTORY_PATH = REPO_ROOT / "volforce_history.jsonl"
 MUSIC_DB_PATH = GAME_ROOT / "data" / "others" / "music_db.xml"
 PULLING_RATE = 1
 

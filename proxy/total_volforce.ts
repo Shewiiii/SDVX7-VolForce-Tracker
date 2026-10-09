@@ -39,12 +39,9 @@ export class TotalVolforceStore {
     state: TotalVolforceSnapshot | undefined;
     private pendingPlayers = new Map<string, Record<string, string | number>>();
 
-    constructor(filename: string) {
+    constructor(filename: string, historyFilename: string) {
         this.filename = filename;
-        this.historyFilename = path.join(
-            path.dirname(filename),
-            "volforce_history.jsonl",
-        );
+        this.historyFilename = historyFilename;
         this.state = undefined;
         try {
             const state: TotalVolforceSnapshot = JSON.parse(

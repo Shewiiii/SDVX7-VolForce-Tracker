@@ -26,12 +26,13 @@ def prepare() -> tuple[list[list[str]], dict[str, str], Path]:
     if packages.returncode:
         raise RuntimeError("Python requirements are missing. Run setup.bat first.")
     # config loads this repository's .env, even when launched from another folder.
-    from config import MUSIC_DB_PATH, SCORE_LOG_PATH
+    from config import MUSIC_DB_PATH, SCORE_LOG_PATH, VOLFORCE_HISTORY_PATH
 
-    legacy_score_log = REPO_ROOT / "cache" / "score_log.txt"
-    if legacy_score_log.is_file() and not SCORE_LOG_PATH.exists():
-        SCORE_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
-        legacy_score_log.rename(SCORE_LOG_PATH)
+    for destination in (SCORE_LOG_PATH, VOLFORCE_HISTORY_PATH):
+        legacy_path = REPO_ROOT / "cache" / destination.name
+        if legacy_path.is_file() and not destination.exists():
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            legacy_path.rename(destination)
 
     if not os.getenv("BOT_TOKEN"):
         raise RuntimeError("BOT_TOKEN is missing. Run setup.bat to configure Discord.")
@@ -51,6 +52,7 @@ def prepare() -> tuple[list[list[str]], dict[str, str], Path]:
     env = decoder_environment(root)
     env.update(
         TRACKER_SCORE_LOG=str(SCORE_LOG_PATH),
+        TRACKER_VOLFORCE_HISTORY=str(VOLFORCE_HISTORY_PATH),
     )
     try:
         port = int(env.get("TRACKER_PROXY_PORT", "8080"))

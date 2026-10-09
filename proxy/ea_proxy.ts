@@ -10,6 +10,7 @@ const { ChartLevelStore } = require("./music_db");
 const repoRoot = path.resolve(__dirname, "..");
 const totalVolforce = new TotalVolforceStore(
     path.join(repoRoot, "cache", "total_volforce.json"),
+    process.env.TRACKER_VOLFORCE_HISTORY || path.join(repoRoot, "volforce_history.jsonl"),
 );
 
 const listenPort = Number(process.env.TRACKER_PROXY_PORT || 8080);
