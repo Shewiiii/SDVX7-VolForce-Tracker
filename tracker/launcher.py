@@ -28,7 +28,7 @@ def prepare() -> tuple[list[list[str]], dict[str, str], Path]:
     # config loads this repository's .env, even when launched from another folder.
     from config import MUSIC_DB_PATH, SCORE_LOG_PATH
 
-    legacy_score_log = REPO_ROOT / "score_log.txt"
+    legacy_score_log = REPO_ROOT / "cache" / "score_log.txt"
     if legacy_score_log.is_file() and not SCORE_LOG_PATH.exists():
         SCORE_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
         legacy_score_log.rename(SCORE_LOG_PATH)
