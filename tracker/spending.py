@@ -3,7 +3,7 @@ import logging
 import math
 import re
 import urllib.request
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from functools import lru_cache
 from pathlib import Path
 
@@ -36,11 +36,9 @@ def load_play_summary(path: str | Path, user_id: int) -> tuple[int, datetime | N
                     count += 1
                     if first is None:
                         try:
-                            first = datetime.fromisoformat(
-                                record["received_at"].replace("Z", "+00:00")
-                            )
+                            first = datetime.fromisoformat(record["received_at"])
                             if first.tzinfo is None:
-                                first = first.replace(tzinfo=timezone.utc)
+                                first = first.replace(tzinfo=UTC)
                         except (ValueError, TypeError, KeyError, AttributeError):
                             first = None
             except (ValueError, TypeError, OverflowError):
@@ -49,7 +47,7 @@ def load_play_summary(path: str | Path, user_id: int) -> tuple[int, datetime | N
 
 
 @lru_cache(maxsize=8)
-def _fetch_jpy_rate(currency: str, day: str) -> dict: # Day for cache
+def _fetch_jpy_rate(currency: str, day: str) -> dict:  # Day for cache
     request = urllib.request.Request(
         f"https://api.frankfurter.dev/v2/rate/jpy/{currency.lower()}",
         headers={"User-Agent": "SDVX-VolForce-Tracker", "Accept": "application/json"},
@@ -75,7 +73,7 @@ def get_jpy_rate(currency: str) -> dict | None:
     try:
         if not re.fullmatch(r"[A-Z]{3}", currency):
             raise ValueError("Expected a three-letter ISO currency code")
-        return _fetch_jpy_rate(currency, datetime.now(timezone.utc).date().isoformat())
+        return _fetch_jpy_rate(currency, datetime.now(UTC).date().isoformat())
     except (OSError, ValueError, TypeError, KeyError) as error:
         logger.warning(
             "Could not convert spending estimates to %s: %s", currency, error
