@@ -58,6 +58,7 @@ Currency convertion can be changed during setup and in `.env` file.
 
 - You cannot run the game without the proxy, as long as EA Service URL is set to localhost.
 - Due to API limitations, the message is sent only after quitting the result page.
+- Active playtime is not calculated the same way as RyuNET: it calculates the time between attach and detach of `ALTERNATIVE_GAME_SCENE`, which is in my opinion more accurate.
 - Timing is estimated from the midpoints of the following 7 values histogram the game sends to the server, found in `soundvoltex.dll`. It does not match in-game's CRITICAL or NEAR judgements for some reasons:
 
 |        | Window      | Midpoint |

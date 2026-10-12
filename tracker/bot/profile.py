@@ -13,7 +13,11 @@ import discord
 from config import (
     DIFF_NAMES,
     FOOTER,
+    INITIAL_PLAYTIME,
     MUSIC_DB_PATH,
+    PLAYTIME_BASELINE_PLAYS,
+    PLAYTIME_BASELINE_SECONDS,
+    PLAYTIME_STATE_PATH,
     SCORE_LOG_PATH,
     SPENDING_CURRENCY,
     TOTAL_VOLFORCE_CACHE_PATH,
@@ -21,6 +25,7 @@ from config import (
 )
 from tracker.music import MusicCatalog
 from tracker.performance_chart import load_play_history
+from tracker.playtime import format_playtime, load_playtime_summary
 from tracker.spending import START_PRICES, get_jpy_rate, load_play_summary
 from tracker.timing import load_timing_summary
 from tracker.total_volforce import load_total_volforce
@@ -75,6 +80,7 @@ def build_profile_embed(
     play_count: int | None = None,
     exchange_rate: dict | None = None,
     tracking_since: datetime | None = None,
+    playtime: dict | None = None,
 ) -> discord.Embed:
     player = snapshot["player"] if snapshot else {}
     name = discord.utils.escape_markdown(str(player.get("name") or USERNAME))[:100]
@@ -214,6 +220,20 @@ def build_profile_embed(
             inline=False,
         )
 
+    # PLAYTIME
+    if playtime is not None:
+        lines = [format_playtime(playtime["total_seconds"])]
+        if playtime["initial_seconds"]:
+            lines.append(
+                f"> {format_playtime(playtime['initial_seconds'], include_seconds=False)} from RyuNET + "
+                f"{format_playtime(playtime['local_seconds'], include_seconds=False)}"
+            )
+        embed.add_field(name="Playtime", value="\n".join(lines), inline=False)
+    else:
+        embed.add_field(
+            name="Playtime", value="Playtime history unavailable.", inline=False
+        )
+
     # SPENDING
     spending = "Local play count unavailable."
     if play_count is not None:
@@ -230,9 +250,11 @@ def build_profile_embed(
 
     # TRACKING DETAILS
     tracking = [
-        f"- Saved charts: {snapshot['chart_count']:,} charts across {snapshot['song_count']:,} songs"
-        if snapshot
-        else "- Saved charts: Unavailable."
+        (
+            f"- Saved charts: {snapshot['chart_count']:,} charts across {snapshot['song_count']:,} songs"
+            if snapshot
+            else "- Saved charts: Unavailable."
+        )
     ]
     if history:
         values = [play["play_vf"] for play in history]
@@ -264,9 +286,7 @@ def build_profile_embed(
         captured = f"{prefix}> Charts <t:{updated}:R>"
         if snapshot["player_updated_at"]:
             try:
-                timestamp = datetime.fromisoformat(
-                    snapshot["player_updated_at"].replace("Z", "+00:00")
-                )
+                timestamp = datetime.fromisoformat(snapshot["player_updated_at"])
                 if timestamp.tzinfo is not None:
                     captured += (
                         f"\n> Account details <t:{int(timestamp.timestamp())}:R>"
@@ -331,6 +351,18 @@ class Profile(discord.Cog):
             play_count = None
             tracking_since = None
 
+        try:
+            playtime = await asyncio.to_thread(
+                load_playtime_summary,
+                PLAYTIME_STATE_PATH,
+                INITIAL_PLAYTIME,
+                int(PLAYTIME_BASELINE_SECONDS),
+                int(PLAYTIME_BASELINE_PLAYS),
+            )
+        except (OSError, ValueError, TypeError) as error:
+            logger.warning("Could not load playtime history: %s", error)
+            playtime = None
+
         exchange_rate = (
             await asyncio.to_thread(get_jpy_rate, SPENDING_CURRENCY)
             if play_count is not None
@@ -345,6 +377,7 @@ class Profile(discord.Cog):
             play_count=play_count,
             exchange_rate=exchange_rate,
             tracking_since=tracking_since,
+            playtime=playtime,
         )
         appeal_id = snapshot["player"].get("appeal_id") if snapshot else None
         card_bytes = await asyncio.to_thread(find_local_appeal_card, appeal_id)

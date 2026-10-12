@@ -100,7 +100,7 @@ def main() -> int:
     try:
         commands, env, root = prepare()
         print(
-            "Starting the proxy and Discord bot. Keep this window open.",
+            "Starting the proxy and tracker. Keep this window open.",
             flush=True,
         )
         for command, cwd in zip(commands, (root, REPO_ROOT)):

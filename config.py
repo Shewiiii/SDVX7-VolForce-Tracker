@@ -13,7 +13,12 @@ SCORE_LOG_PATH = REPO_ROOT / "score_log.txt"
 TOTAL_VOLFORCE_CACHE_PATH = REPO_ROOT / "cache" / "total_volforce.json"
 VOLFORCE_HISTORY_PATH = REPO_ROOT / "volforce_history.jsonl"
 MUSIC_DB_PATH = GAME_ROOT / "data" / "others" / "music_db.xml"
-PULLING_RATE = 1
+GAME_LOG_PATH = Path(os.getenv("TRACKER_GAME_LOG") or GAME_ROOT / "log.txt")
+PLAYTIME_STATE_PATH = REPO_ROOT / "cache" / "playtime.json"
+INITIAL_PLAYTIME = os.getenv("TRACKER_INITIAL_PLAYTIME") or "0"
+PLAYTIME_BASELINE_SECONDS = os.getenv("TRACKER_PLAYTIME_BASELINE_SECONDS") or "0"
+PLAYTIME_BASELINE_PLAYS = os.getenv("TRACKER_PLAYTIME_BASELINE_PLAYS") or "0"
+PULLING_RATE = 2
 
 USERNAME = os.getenv("TRACKER_USERNAME") or "Shewi"
 FOOTER = "SDVX ∇ VolForce Tracker"

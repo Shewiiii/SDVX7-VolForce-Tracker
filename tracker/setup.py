@@ -153,9 +153,7 @@ def prompt(label: str, default: str = "", *, show_default: bool = True) -> str:
     suffix = (
         " [Enter to keep existing value]"
         if default and not show_default
-        else f" [{default}]"
-        if default
-        else ""
+        else f" [{default}]" if default else ""
     )
     return input(f"{label}{suffix}: ").strip() or default
 
@@ -163,7 +161,8 @@ def prompt(label: str, default: str = "", *, show_default: bool = True) -> str:
 def configure() -> None:
     from dotenv import dotenv_values, set_key
 
-    from config import SPENDING_CURRENCY, USERNAME
+    from config import GAME_LOG_PATH, PLAYTIME_STATE_PATH, SPENDING_CURRENCY, USERNAME
+    from tracker.playtime import PlaytimeTracker, parse_playtime
 
     env_path = REPO_ROOT / ".env"
     existing = dotenv_values(env_path)
@@ -186,20 +185,60 @@ def configure() -> None:
     username = prompt("Display name for stats", USERNAME)
     currency = existing.get("TRACKER_CURRENCY") or SPENDING_CURRENCY
     while True:
-        currency = prompt(
-            "Currency for spending estimates, in ISO format, for example EUR, USD, AUD, CNY, KRW.",
-            currency,
-        ).strip().upper()
+        currency = (
+            prompt(
+                "Currency for spending estimates, in ISO format, for example EUR, USD, AUD, CNY, KRW.",
+                currency,
+            )
+            .strip()
+            .upper()
+        )
         if currency.isascii() and currency.isalpha() and len(currency) == 3:
             break
         print("Enter a three-letter currency code.")
         currency = ""
+
+    previous = existing.get("TRACKER_INITIAL_PLAYTIME") or "0"
+    try:
+        previous_seconds = parse_playtime(previous)
+    except ValueError:
+        previous_seconds = None
+    initial_playtime = previous if previous_seconds is not None else "0"
+    while True:
+        initial_playtime = prompt(
+            "RyuNET starting playtime (2d 7h, 13h or 12h 30m)",
+            initial_playtime,
+        )
+        try:
+            initial_seconds = parse_playtime(initial_playtime)
+            break
+        except ValueError as error:
+            print(error)
+            initial_playtime = "0"
+
+    playtime_settings = {"TRACKER_INITIAL_PLAYTIME": initial_playtime}
+    same_initial = (
+        previous_seconds == initial_seconds
+        and existing.get("TRACKER_PLAYTIME_BASELINE_SECONDS") is not None
+        and existing.get("TRACKER_PLAYTIME_BASELINE_PLAYS") is not None
+    )
+    if not same_initial:
+        checkpoint = {"seconds": 0, "plays": 0}
+        if initial_seconds:
+            checkpoint = PlaytimeTracker(
+                GAME_LOG_PATH, PLAYTIME_STATE_PATH
+            ).checkpoint()
+        playtime_settings.update(
+            TRACKER_PLAYTIME_BASELINE_SECONDS=str(checkpoint["seconds"]),
+            TRACKER_PLAYTIME_BASELINE_PLAYS=str(checkpoint["plays"]),
+        )
 
     for key, value in {
         "BOT_TOKEN": token,
         "USER_ID": user_id,
         "TRACKER_USERNAME": username,
         "TRACKER_CURRENCY": currency,
+        **playtime_settings,
     }.items():
         set_key(env_path, key, value, quote_mode="always")
     print("Configuration saved.")
@@ -213,7 +252,7 @@ def main() -> int:
             cwd=REPO_ROOT,
         )
         return 0
-    except (OSError, RuntimeError, subprocess.CalledProcessError) as error:
+    except (OSError, RuntimeError, ValueError, subprocess.CalledProcessError) as error:
         print(f"Setup failed: {error}", file=sys.stderr)
         return 1
     except (EOFError, KeyboardInterrupt):
