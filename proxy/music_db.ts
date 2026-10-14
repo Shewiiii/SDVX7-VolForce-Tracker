@@ -67,10 +67,7 @@ export class ChartLevelStore {
                         if (raw == null || raw === "") return;
                         const level = Number(raw);
                         if (!Number.isFinite(level) || level < 0) return;
-                        source.set(
-                            `${id}:${index}`,
-                            level > 20 ? level / 10 : level,
-                        );
+                        source.set(`${id}:${index}`, level / 10);
                     });
                 }
                 this.sources.set(filename, source);

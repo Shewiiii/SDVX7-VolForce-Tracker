@@ -54,7 +54,7 @@ def _read_database(path: Path) -> tuple[dict, dict, dict, dict, dict]:
                         continue
                     value = float(chart.findtext("difnum", "0"))
                     if math.isfinite(value) and value >= 0:
-                        charts[index] = value / 10 if value > 20 else value
+                        charts[index] = value / 10
                     break
             levels[mid] = charts
         except (ValueError, TypeError, AttributeError) as error:
