@@ -7,6 +7,8 @@ The script observes the game's e-amusement result requests through a local proxy
 
 [Custom charts](https://x.ryu7w7.xyz/plugin/sdvx@asphyxia/custom%20charts%20setup) are supported.
 
+For a WebUI, check the extension of this app, [SDVX ∇ Tracker Dashboard](https://github.com/Shewiiii/SDVX7-Tracker-Dashboard).
+
 <p>
 	<img src="assets/img/rasis.jpg" alt="Rasis sending play results" width="400">
 </p>
