@@ -16,7 +16,7 @@ SCENE_EVENT = re.compile(
 
 
 def parse_playtime(value: str) -> int:
-    """Accept whole d/h/m/s units, or 0 to skip; return seconds."""
+    """Accept whole d/h/m/s units, or 0 to skip. Return seconds."""
     value = value.strip()
     if value == "0":
         return 0
@@ -55,7 +55,7 @@ def read_state(path: Path) -> dict:
         or not isinstance(state.get("cursor"), dict)
     ):
         raise ValueError(
-            "Invalid playtime history; restore cache/playtime.json from backup."
+            "Invalid playtime history. Restore cache/playtime.json from backup."
         )
     cursor = state["cursor"]
     if cursor:

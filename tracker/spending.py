@@ -66,7 +66,7 @@ def _fetch_jpy_rate(currency: str, day: str) -> dict:  # Day for cache
 
 
 def get_jpy_rate(currency: str) -> dict | None:
-    """Fetch a daily reference rate without an API key; keep yen on failure."""
+    """Fetch a daily reference rate without an API key. Keep yen on failure."""
     currency = currency.strip().upper()
     if currency == "JPY":
         return {"rate": 1.0, "date": None}

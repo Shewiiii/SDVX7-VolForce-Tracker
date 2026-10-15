@@ -55,7 +55,7 @@ def _performance_background(size: tuple[int, int]) -> Image.Image:
         return Image.blend(wallpaper, base, min(1, max(0, PERFORMANCE_BACKGROUND_DIM)))
     except (OSError, ValueError) as error:
         logging.getLogger(__name__).warning(
-            "Could not load performance background %s; using solid color: %s",
+            "Could not load performance background %s. Using solid color: %s",
             path,
             error,
         )
@@ -136,7 +136,7 @@ def load_play_history(
 
 
 def best_play_message(record: dict, history: list[dict]) -> str | None:
-    """Find the longest top-five period; equal VF shares a rank."""
+    """Find the longest top-five period. Equal VF shares a rank."""
     if int(record.get("clear_type", 0)) == 1:
         return None
     timestamp = datetime.fromisoformat(record["received_at"].replace("Z", "+00:00"))
@@ -183,7 +183,7 @@ def load_performance_history(
 def _visible_observations(
     history: list[dict], start: datetime, end: datetime
 ) -> list[dict]:
-    """Carry the last known observation into the window; never backdate one."""
+    """Carry the last known observation into the window. Never backdate one."""
     previous = None
     visible = []
     for observation in sorted(history, key=lambda record: record["timestamp"]):
