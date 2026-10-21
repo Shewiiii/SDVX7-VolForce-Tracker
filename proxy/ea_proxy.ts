@@ -365,7 +365,7 @@ function writeResults(decoded) {
         );
         if (!Object.keys(judgments.counts).length) {
             console.warn(
-                "No recognized judgment counters; judgment field names:",
+                "No recognized judgment counters. Judgment field names:",
                 Object.keys(judgments.raw),
             );
         }
@@ -473,7 +473,7 @@ function rewriteServicesResponse(requestUrl, body, headers) {
         return response;
     } catch (error) {
         console.error(
-            "services.get rewrite failed; forwarding original response:",
+            "services.get rewrite failed. Forwarding original response:",
             error.message,
         );
         return body;
@@ -489,7 +489,7 @@ function forwardingTarget(requestUrl) {
         const target = serviceTargets.get(name);
         if (!target)
             throw new Error(
-                "Unknown service endpoint; restart the game to refresh discovery",
+                "Unknown service endpoint. Restart the game to refresh discovery",
             );
         return new URL(
             `${slash < 0 ? "/" : rest.slice(slash)}${incoming.search}`,
@@ -589,9 +589,9 @@ const server = http.createServer((req, res) => {
                             : upstreamBody;
                     if ((req.url || "").includes("f=services.get")) {
                         console.log(
-                            `services.get response ${upstreamResponse.statusCode || 502}; ` +
-                                `type=${upstreamResponse.headers["content-type"] || "unknown"}; ` +
-                                `encoding=${upstreamResponse.headers["content-encoding"] || "identity"}; ` +
+                            `services.get response ${upstreamResponse.statusCode || 502}. ` +
+                                `type=${upstreamResponse.headers["content-type"] || "unknown"}. ` +
+                                `encoding=${upstreamResponse.headers["content-encoding"] || "identity"}. ` +
                                 `bytes=${upstreamBody.length}->${responseBody.length}`,
                         );
                     }

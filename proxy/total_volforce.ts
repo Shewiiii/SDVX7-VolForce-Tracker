@@ -167,7 +167,7 @@ export class TotalVolforceStore {
                 const param = entry?.param?.["@content"];
                 if (!Array.isArray(param) || param.length !== 26)
                     throw new Error(
-                        "Unrecognized sv7_load_m chart layout; preserving old total",
+                        "Unrecognized sv7_load_m chart layout. Preserving old total",
                     );
                 const [mid, difficulty] = param;
                 const vf = param[11];
@@ -181,7 +181,7 @@ export class TotalVolforceStore {
                     vf < 0
                 )
                     throw new Error(
-                        "Invalid sv7_load_m chart; preserving old total",
+                        "Invalid sv7_load_m chart. Preserving old total",
                     );
                 const key = `${mid}:${difficulty}`;
                 charts[key] = Math.max(charts[key] || 0, vf);
