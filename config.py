@@ -8,6 +8,9 @@ from dotenv import load_dotenv
 REPO_ROOT = Path(__file__).resolve().parent
 load_dotenv(REPO_ROOT / ".env")
 GAME_ROOT = REPO_ROOT.parent
+DISCORD_ENABLED = (
+    os.getenv("TRACKER_DISCORD_ENABLED", "true").strip().lower() != "false"
+)
 
 SCORE_LOG_PATH = REPO_ROOT / "score_log.txt"
 TOTAL_VOLFORCE_CACHE_PATH = REPO_ROOT / "cache" / "total_volforce.json"

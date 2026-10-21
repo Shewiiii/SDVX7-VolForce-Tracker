@@ -1,32 +1,17 @@
 # SDVX ∇ VolForce Tracker
 
-Very random script to track, send, and generate stats of plays in real time, for SOUND VOLTEX ∇, running on the RyuNET private network.  
-They are sent in Discord DMs via a local bot.
+> "Rasis Tracker"
 
-The script observes the game's e-amusement result requests through a local proxy and forwards them unchanged to Ryu's server.
+Local proxy to track play statistics, for SOUND VOLTEX ∇, running on the RyuNET private network. It observes the game's e-amusement result requests and forwards them unchanged to Ryu's server.
 
 [Custom charts](https://x.ryu7w7.xyz/plugin/sdvx@asphyxia/custom%20charts%20setup) are supported.
 
-For a WebUI, check the extension of this app, [SDVX ∇ Tracker Dashboard](https://github.com/Shewiiii/SDVX7-Tracker-Dashboard).
+Data is stored in `score_log.txt` and `volforce_history.jsonl`. Do not delete these files !
 
-<p>
-	<img src="assets/img/rasis.jpg" alt="Rasis sending play results" width="400">
-</p>
-<p>
-	<img src="assets/img/profile.jpg" alt="Profile embed" width="700">
-</p>
+To vizualize the data, you have two choices, but you can enable both:
 
-Currency convertion can be changed during setup and in `.env` file.
-
-<p>
-	<img src="assets/img/top-plays.jpg" alt="Top Plays embed" width="700">
-</p>
-<p>
-	<img src="assets/img/leaderboard.jpg" alt="Local leaderboard of a chart" width="700">
-</p>
-<p>
-	<img src="assets/img/performance.png" alt="VolForce Performance History embed" width="700">
-</p>
+- A WebUI ([exemple](https://sdvx.shewi.app/)). You will need to download the extension of this project: [SDVX ∇ Tracker Dashboard](https://github.com/Shewiiii/SDVX7-Tracker-Dashboard). This repo is actively maintained.
+- A discord bot, to get in real time data after a play, but I do not maintain it actively anymore. You can enable or disable it during setup.
 
 ## Requirements
 
@@ -49,12 +34,36 @@ Currency convertion can be changed during setup and in `.env` file.
 	|-- spicecfg.exe
 ```
 
-- Create a [Discord app](https://discord.com/developers/applications).
-- Under `Installation`, copy the install link, paste it anywhere in Discord, then click on it to user-install the app.
-- Under `Bot`, enable Message Content Intent, generate a token and copy it.
-- Run `setup.bat` and follow the instructions
+- **IF** you want to use the Discord bot:
+    - Create a [Discord app](https://discord.com/developers/applications).
+    - Under `Installation`, copy the install link, paste it anywhere in Discord, then click on it to user-install the app.
+    - Under `Bot`, enable Message Content Intent, generate a token and copy it.
+- Run `setup.bat` and follow the instructions.
 - Set Spice2x's EA Service URL to `http://127.0.0.1:8080/service`
 - Run `SDVX-∇-VolForce-Tracker.bat`, _then_ start the game. Create a shortcut of it for easy access !
+
+You can run `setup.bat` again if you want to change environment values.
+
+## Screenshots (if using bot)
+
+<p>
+	<img src="assets/img/rasis.jpg" alt="Rasis sending play results" width="400">
+</p>
+<p>
+	<img src="assets/img/profile.jpg" alt="Profile embed" width="700">
+</p>
+
+Currency convertion can be changed during setup and in `.env` file.
+
+<p>
+	<img src="assets/img/top-plays.jpg" alt="Top Plays embed" width="700">
+</p>
+<p>
+	<img src="assets/img/leaderboard.jpg" alt="Local leaderboard of a chart" width="700">
+</p>
+<p>
+	<img src="assets/img/performance.png" alt="VolForce Performance History embed" width="700">
+</p>
 
 ## Limitations
 

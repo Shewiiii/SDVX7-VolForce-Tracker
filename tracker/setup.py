@@ -161,27 +161,44 @@ def prompt(label: str, default: str = "", *, show_default: bool = True) -> str:
 def configure() -> None:
     from dotenv import dotenv_values, set_key
 
-    from config import GAME_LOG_PATH, PLAYTIME_STATE_PATH, SPENDING_CURRENCY, USERNAME
+    from config import (
+        DISCORD_ENABLED,
+        GAME_LOG_PATH,
+        PLAYTIME_STATE_PATH,
+        SPENDING_CURRENCY,
+        USERNAME,
+    )
     from tracker.playtime import PlaytimeTracker, parse_playtime
 
     env_path = REPO_ROOT / ".env"
     existing = dotenv_values(env_path)
-    token = prompt(
-        "Discord bot token", existing.get("BOT_TOKEN") or "", show_default=False
-    )
-    while not token:
-        token = prompt("Bot token is required")
-    user_id = existing.get("USER_ID") or ""
-
     while True:
-        user_id = prompt(
-            "Your Discord user ID (enable dev mode, then click on your profile to copy it)",
-            user_id,
-        )
-        if user_id.isascii() and user_id.isdecimal() and 0 < int(user_id) < 2**64:
+        choice = prompt(
+            "Enable Discord bot? (yes/no)",
+            "yes" if DISCORD_ENABLED else "no",
+        ).lower()
+        if choice in {"yes", "y", "no", "n"}:
             break
-        print("Enter the numeric user ID, not your username.")
-        user_id = ""
+        print("Enter yes or no.")
+    enable_discord = choice in {"yes", "y"}
+    discord_settings = {"TRACKER_DISCORD_ENABLED": str(enable_discord).lower()}
+    if enable_discord:
+        token = prompt(
+            "Discord bot token", existing.get("BOT_TOKEN") or "", show_default=False
+        )
+        while not token:
+            token = prompt("Bot token is required")
+        user_id = existing.get("USER_ID") or ""
+        while True:
+            user_id = prompt(
+                "Your Discord user ID (enable dev mode, then click on your profile to copy it)",
+                user_id,
+            )
+            if user_id.isascii() and user_id.isdecimal() and 0 < int(user_id) < 2**64:
+                break
+            print("Enter the numeric user ID, not your username.")
+            user_id = ""
+        discord_settings.update(BOT_TOKEN=token, USER_ID=user_id)
     username = prompt("Display name for stats", USERNAME)
     currency = existing.get("TRACKER_CURRENCY") or SPENDING_CURRENCY
     while True:
@@ -234,8 +251,7 @@ def configure() -> None:
         )
 
     for key, value in {
-        "BOT_TOKEN": token,
-        "USER_ID": user_id,
+        **discord_settings,
         "TRACKER_USERNAME": username,
         "TRACKER_CURRENCY": currency,
         **playtime_settings,

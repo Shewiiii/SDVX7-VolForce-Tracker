@@ -16,17 +16,30 @@ from .setup import (
 )
 
 
-def prepare() -> tuple[list[list[str]], dict[str, str], Path]:
+def check_packages(imports: str) -> None:
     packages = subprocess.run(
-        [sys.executable, "-c", PYTHON_IMPORTS],
+        [sys.executable, "-c", imports],
         check=False,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
     if packages.returncode:
         raise RuntimeError("Python requirements are missing. Run setup.bat first.")
+
+
+def prepare() -> tuple[list[list[str]], dict[str, str], Path]:
+    check_packages("import dotenv")
     # config loads this repository's .env, even when launched from another folder.
-    from config import MUSIC_DB_PATH, SCORE_LOG_PATH, VOLFORCE_HISTORY_PATH
+    from config import (
+        DISCORD_ENABLED,
+        MUSIC_DB_PATH,
+        SCORE_LOG_PATH,
+        VOLFORCE_HISTORY_PATH,
+    )
+
+    enable_discord = DISCORD_ENABLED
+    if enable_discord:
+        check_packages(PYTHON_IMPORTS)
 
     for destination in (SCORE_LOG_PATH, VOLFORCE_HISTORY_PATH):
         legacy_path = REPO_ROOT / "cache" / destination.name
@@ -34,13 +47,20 @@ def prepare() -> tuple[list[list[str]], dict[str, str], Path]:
             destination.parent.mkdir(parents=True, exist_ok=True)
             legacy_path.rename(destination)
 
-    if not os.getenv("BOT_TOKEN"):
-        raise RuntimeError("BOT_TOKEN is missing. Run setup.bat to configure Discord.")
-    user_id = os.getenv("USER_ID", "")
-    if not user_id.isascii() or not user_id.isdecimal() or not 0 < int(user_id) < 2**64:
-        raise RuntimeError(
-            "USER_ID must be your numeric Discord user ID. Run setup.bat."
-        )
+    if enable_discord:
+        if not os.getenv("BOT_TOKEN"):
+            raise RuntimeError(
+                "BOT_TOKEN is missing. Run setup.bat to configure Discord."
+            )
+        user_id = os.getenv("USER_ID", "")
+        if (
+            not user_id.isascii()
+            or not user_id.isdecimal()
+            or not 0 < int(user_id) < 2**64
+        ):
+            raise RuntimeError(
+                "USER_ID must be your numeric Discord user ID. Run setup.bat."
+            )
     if not MUSIC_DB_PATH.is_file():
         raise RuntimeError(
             "music_db.xml was not found. Put SDVX7-VolForce-Tracker-main inside your game folder."
@@ -78,8 +98,9 @@ def prepare() -> tuple[list[list[str]], dict[str, str], Path]:
             str(root / "node_modules/ts-node/register"),
             str(REPO_ROOT / "proxy/ea_proxy.ts"),
         ],
-        [sys.executable, "-u", "-m", "tracker.bot"],
     ]
+    if enable_discord:
+        commands.append([sys.executable, "-u", "-m", "tracker.bot"])
     return commands, env, root
 
 
@@ -99,13 +120,28 @@ def main() -> int:
     processes = []
     try:
         commands, env, root = prepare()
+        playtime = None
+        next_poll = 0.0
+        if len(commands) == 1:
+            from config import GAME_LOG_PATH, PLAYTIME_STATE_PATH, PULLING_RATE
+            from tracker.playtime import PlaytimeTracker
+
+            playtime = PlaytimeTracker(GAME_LOG_PATH, PLAYTIME_STATE_PATH)
         print(
-            "Starting the proxy and tracker. Keep this window open.",
+            "Starting the proxy"
+            + (" (Discord disabled)" if playtime is not None else " and Discord bot")
+            + ". Keep this window open.",
             flush=True,
         )
         for command, cwd in zip(commands, (root, REPO_ROOT)):
             processes.append(subprocess.Popen(command, cwd=cwd, env=env))
         while all(process.poll() is None for process in processes):
+            if playtime is not None and time.monotonic() >= next_poll:
+                try:
+                    playtime.poll()
+                except (OSError, ValueError, TypeError, KeyError) as error:
+                    print(f"Could not update active playtime: {error}", file=sys.stderr)
+                next_poll = time.monotonic() + PULLING_RATE
             time.sleep(0.5)
         return 1
     except KeyboardInterrupt:
