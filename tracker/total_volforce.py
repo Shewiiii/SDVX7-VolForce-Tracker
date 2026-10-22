@@ -1,6 +1,6 @@
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 
@@ -34,9 +34,7 @@ def load_total_volforce(path: str | Path) -> dict | None:
                 and 0 <= clear <= 6
             ):
                 records[key] = record
-        updated_at = datetime.fromisoformat(
-            snapshot["updated_at"].replace("Z", "+00:00")
-        )
+        updated_at = datetime.fromisoformat(snapshot["updated_at"])
         if updated_at.tzinfo is None:
             raise ValueError("Snapshot time must include a timezone")
         return {
@@ -72,9 +70,7 @@ def load_volforce_history(path: str | Path, snapshot: dict | None) -> list[dict]
                     record = json.loads(line)
                     if record["profile_id"] != snapshot["profile_id"]:
                         continue
-                    timestamp = datetime.fromisoformat(
-                        record["timestamp"].replace("Z", "+00:00")
-                    )
+                    timestamp = datetime.fromisoformat(record["timestamp"])
                     total, minimum, count = (
                         record["total_volforce"],
                         record["minimum_volforce"],
@@ -90,7 +86,7 @@ def load_volforce_history(path: str | Path, snapshot: dict | None) -> list[dict]
                         or (count < 50 and minimum is not None)
                     ):
                         continue
-                    timestamp = timestamp.astimezone(timezone.utc)
+                    timestamp = timestamp.astimezone(UTC)
                     observations[timestamp] = {
                         "timestamp": timestamp,
                         "total_volforce": total / 1000,
@@ -104,7 +100,7 @@ def load_volforce_history(path: str | Path, snapshot: dict | None) -> list[dict]
         pass
     except OSError as error:
         logging.getLogger(__name__).warning("Cannot read VolForce history: %s", error)
-    timestamp = snapshot["updated_at"].astimezone(timezone.utc)
+    timestamp = snapshot["updated_at"].astimezone(UTC)
     worst = snapshot["worst_top_chart"]
     observations.setdefault(
         timestamp,
