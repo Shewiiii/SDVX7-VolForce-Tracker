@@ -16,3 +16,4 @@ runtime/*
 !runtime/tsconfig.json
 !runtime/requirements.txt
 .vscode
+/SDVX7-Tracker-Dashboard-main/
