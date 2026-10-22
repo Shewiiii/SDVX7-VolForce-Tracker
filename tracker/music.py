@@ -15,9 +15,10 @@ DIFFICULTY_TAGS = (
     ("ultimate",),
 )
 JACKET_INDICES = ((1,), (2, 1), (3, 2, 1), (4, 3, 1), (5, 4, 3, 1), (5, 4, 3, 1))
+RADAR_TAGS = ("notes", "peak", "tsumami", "tricky", "hand-trip", "one-hand")
 
 
-def _read_database(path: Path) -> tuple[dict, dict, dict, dict, dict, dict]:
+def _read_database(path: Path) -> tuple[dict, dict, dict, dict, dict, dict, dict]:
     raw = path.read_bytes()
     declaration = re.search(rb'encoding=[\'"]([^\'"]+)', raw[:200], re.IGNORECASE)
     encoding = declaration[1].decode("ascii").lower() if declaration else "utf-8-sig"
@@ -30,6 +31,7 @@ def _read_database(path: Path) -> tuple[dict, dict, dict, dict, dict, dict]:
     titles, artists, levels = {}, {}, {}
     title_readings, artist_readings = {}, {}
     title_ascii = {}
+    radars = {}
     for music in root.findall("music"):
         try:
             mid = int(music.get("id", "0"))
@@ -51,6 +53,7 @@ def _read_database(path: Path) -> tuple[dict, dict, dict, dict, dict, dict]:
             if ascii_title:
                 title_ascii[mid] = ascii_title
             charts = {}
+            chart_radars = {}
             for index, tags in enumerate(DIFFICULTY_TAGS):
                 for tag in tags:
                     chart = music.find(f"difficulty/{tag}")
@@ -59,11 +62,24 @@ def _read_database(path: Path) -> tuple[dict, dict, dict, dict, dict, dict]:
                     value = float(chart.findtext("difnum", "0"))
                     if math.isfinite(value) and value >= 0:
                         charts[index] = value / 10
+                    try:
+                        radar = [
+                            int(chart.findtext(f"radar/{axis}", ""))
+                            for axis in RADAR_TAGS
+                        ]
+                        chart_radars[index] = (
+                            radar
+                            if all(0 <= value <= 65535 for value in radar)
+                            else None
+                        )
+                    except (ValueError, TypeError):
+                        chart_radars[index] = None
                     break
             levels[mid] = charts
+            radars[mid] = chart_radars
         except (ValueError, TypeError, AttributeError) as error:
             logger.debug("Skipping invalid music entry in %s: %s", path, error)
-    return titles, artists, levels, title_readings, artist_readings, title_ascii
+    return titles, artists, levels, title_readings, artist_readings, title_ascii, radars
 
 
 class MusicCatalog:
@@ -79,6 +95,7 @@ class MusicCatalog:
         self.titles, self.artists, self.levels = {}, {}, {}
         self.title_readings, self.artist_readings = {}, {}
         self.title_ascii = {}
+        self.radars = {}
 
     def refresh(self) -> None:
         """Reload changed files: retain a last good source during a failed sync."""
@@ -116,6 +133,7 @@ class MusicCatalog:
             titles, artists, levels = {}, {}, {}
             title_readings, artist_readings = {}, {}
             title_ascii = {}
+            radars = {}
             for path in self.paths:
                 (
                     source_titles,
@@ -124,7 +142,8 @@ class MusicCatalog:
                     source_title_readings,
                     source_artist_readings,
                     source_title_ascii,
-                ) = self._sources.get(path, ({}, {}, {}, {}, {}, {}))
+                    source_radars,
+                ) = self._sources.get(path, ({}, {}, {}, {}, {}, {}, {}))
                 titles.update(source_titles)
                 artists.update(source_artists)
                 title_readings.update(source_title_readings)
@@ -132,9 +151,12 @@ class MusicCatalog:
                 title_ascii.update(source_title_ascii)
                 for mid, charts in source_levels.items():
                     levels.setdefault(mid, {}).update(charts)
+                for mid, charts in source_radars.items():
+                    radars.setdefault(mid, {}).update(charts)
             self.titles, self.artists, self.levels = titles, artists, levels
             self.title_readings, self.artist_readings = title_readings, artist_readings
             self.title_ascii = title_ascii
+            self.radars = radars
             logger.info(
                 "Loaded %d songs from original/custom music databases", len(levels)
             )
